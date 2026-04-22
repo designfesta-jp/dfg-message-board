@@ -533,6 +533,7 @@ window.switchTab = function(tabId) {
   document.getElementById(tabId).classList.add('active');
   document.getElementById('tab-btn-' + tabId.replace('tab-', '')).classList.add('active');
   if (tabId === 'tab-import') checkQueue();
+  if (tabId === 'tab-qr' || tabId === 'tab-messages') updateSelects();
 };
 
 // ── 全データ読み込み ──────────────────────────────────────
@@ -764,6 +765,7 @@ window.importQueue = async function() {
     queueDocs = [];
     showToast(`✓ ${count}件を取り込みました`);
     await loadSpaces();
+    updateSelects();
     switchTab('tab-spaces');
   } catch(e) {
     console.error(e);
