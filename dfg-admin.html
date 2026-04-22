@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gallery Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=EB+Garamond:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #f5f0e8;
+      --bg-panel: #eee8d8;
+      --bg-card: #ffffff;
+      --border: #d8ceb8;
+      --border-light: #e8e0d0;
+      --accent: #8b6f47;
+      --accent-light: #c4a882;
+      --accent-bg: #f5ead8;
+      --text: #2c2416;
+      --text-mid: #6b5a42;
+      --text-light: #a08c6e;
+      --red: #c0392b;
+      --red-bg: #fdf0ee;
+      --red-border: #e8b4ae;
+      --green: #2e7d52;
+      --green-bg: #edf5f0;
+      --shadow: 0 2px 12px rgba(139,111,71,0.10);
+      --shadow-md: 0 4px 24px rgba(139,111,71,0.15);
+    }
+
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── ログイン画面 ── */
+    #login-screen {
+      min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      padding: 16px;
+    }
+    .login-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 40px 32px;
+      width: 100%; max-width: 360px;
+      box-shadow: var(--shadow-md);
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .login-icon { font-size: 40px; text-align: center; }
+    .login-title { font-family: 'EB Garamond', serif; font-size: 22px; text-align: center; color: var(--accent); letter-spacing: 1px; }
+    .login-sub { font-size: 12px; color: var(--text-light); text-align: center; }
+
+    /* ── メイン画面 ── */
+    #main-screen { display: none; }
+
+    .top-bar {
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 20;
+    }
+    .top-bar-title { font-family: 'EB Garamond', serif; font-size: 18px; color: var(--accent); letter-spacing: 2px; }
+    .logout-btn { font-size: 12px; color: var(--text-light); background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 12px; cursor: pointer; }
+
+    /* ── タブ ── */
+    .tabs {
+      display: flex;
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      gap: 0;
+      overflow-x: auto;
+    }
+    .tab-btn {
+      padding: 12px 20px;
+      font-size: 13px; font-weight: 500;
+      color: var(--text-light);
+      background: none; border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer; white-space: nowrap;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .badge {
+      display: inline-block;
+      background: var(--red); color: #fff;
+      font-size: 10px; border-radius: 10px;
+      padding: 1px 6px; margin-left: 4px; vertical-align: middle;
+    }
+
+    /* ── コンテンツ ── */
+    .tab-content { display: none; padding: 24px; max-width: 800px; margin: 0 auto; }
+    .tab-content.active { display: block; }
+
+    /* ── カード共通 ── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow);
+    }
+    .card-title {
+      font-size: 12px; font-weight: 700;
+      color: var(--accent); letter-spacing: 1px;
+      text-transform: uppercase; margin-bottom: 14px;
+    }
+
+    /* ── フォーム部品 ── */
+    .field {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text); font-size: 13px;
+      padding: 9px 12px; outline: none;
+      font-family: inherit;
+      transition: border-color 0.15s;
+    }
+    .field:focus { border-color: var(--accent-light); }
+    .field.error { border-color: var(--red); }
+    .field-label { font-size: 11px; color: var(--text-light); margin-bottom: 4px; display: block; }
+    .field-row { margin-bottom: 10px; }
+
+    textarea.field { resize: vertical; min-height: 70px; line-height: 1.6; }
+
+    .btn {
+      padding: 10px 18px;
+      border-radius: 8px; border: none;
+      font-size: 13px; font-weight: 700;
+      cursor: pointer; font-family: inherit;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-mid); }
+    .btn-danger { background: var(--red); color: #fff; }
+    .btn-success { background: var(--green); color: #fff; }
+    .btn-sm { padding: 5px 12px; font-size: 11px; border-radius: 6px; }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .err-msg { font-size: 12px; color: var(--red); margin-top: 4px; }
+
+    /* ── キュー取り込みセクション ── */
+    .queue-status {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 16px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .queue-count { font-size: 13px; font-weight: 700; color: var(--accent); }
+    .queue-empty { font-size: 13px; color: var(--text-light); }
+
+    /* ── キュープレビュー ── */
+    .queue-preview {
+      background: var(--bg);
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 8px;
+      font-size: 12px;
+      color: var(--text-mid);
+      line-height: 1.8;
+    }
+    .queue-preview strong { color: var(--text); font-weight: 700; }
+    .queue-preview .preview-title { font-size: 14px; font-weight: 700; color: var(--accent); margin-bottom: 6px; }
+
+    /* ── スペース一覧 ── */
+    .space-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+    .space-card-header {
+      padding: 12px 16px;
+      display: flex; align-items: center; gap: 10px;
+      cursor: pointer;
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border-light);
+    }
+    .space-card-id { font-family: 'EB Garamond', serif; font-size: 18px; color: var(--accent); min-width: 40px; }
+    .space-card-name { font-size: 14px; font-weight: 700; flex: 1; }
+    .space-card-artist { font-size: 11px; color: var(--text-light); }
+    .active-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+    .inactive-dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; flex-shrink: 0; }
+    .space-card-body { padding: 16px; display: none; }
+    .space-card-body.open { display: block; }
+    .sns-tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; background: var(--accent-bg);
+      border: 1px solid var(--accent-light); border-radius: 6px;
+      padding: 3px 8px; color: var(--accent); margin: 2px;
+    }
+    .sns-remove { background: none; border: none; cursor: pointer; color: var(--text-light); font-size: 12px; line-height: 1; }
+
+    /* ── 通報カード ── */
+    .report-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 10px;
+    }
+    .report-card.unread { border-color: var(--accent-light); background: #fffdf8; }
+    .report-meta { font-size: 11px; color: var(--text-light); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .new-badge { font-size: 10px; background: var(--accent); color: #fff; border-radius: 4px; padding: 1px 6px; }
+    .report-msg-box {
+      background: var(--bg);
+      border-left: 3px solid var(--border);
+      border-radius: 0 6px 6px 0;
+      padding: 8px 12px;
+      font-size: 13px; line-height: 1.6;
+      margin-bottom: 8px;
+      word-break: break-word;
+    }
+    .report-reason { font-size: 12px; color: var(--accent); font-weight: 700; margin-bottom: 4px; }
+    .report-note { font-size: 12px; color: var(--text-mid); font-style: italic; }
+    .report-type-badge {
+      font-size: 10px; border-radius: 4px; padding: 2px 7px;
+      display: inline-block; margin-bottom: 6px;
+    }
+    .type-hide { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
+    .type-notify { background: #e8f0fd; color: #3a5fa0; border: 1px solid #b8cef0; }
+
+    /* ── メッセージ管理 ── */
+    .msg-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      display: flex; align-items: flex-start; gap: 10px;
+    }
+    .msg-card.hidden-msg { opacity: 0.5; background: var(--bg); }
+    .msg-card.deleted-msg { opacity: 0.4; background: var(--bg); text-decoration: line-through; }
+    .msg-content { flex: 1; min-width: 0; }
+    .msg-sender { font-size: 11px; font-weight: 700; color: var(--accent); margin-bottom: 3px; }
+    .msg-text { font-size: 13px; line-height: 1.6; word-break: break-word; }
+    .msg-time { font-size: 10px; color: var(--text-light); margin-top: 4px; }
+    .msg-status { font-size: 10px; color: var(--text-light); font-style: italic; }
+    .msg-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+
+    /* ── QRコード ── */
+    .qr-section { text-align: center; padding: 20px; }
+    #qr-canvas { margin: 0 auto; }
+    .qr-url { font-size: 11px; color: var(--text-light); margin-top: 8px; word-break: break-all; }
+
+    /* ── ローディング ── */
+    #loading {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100; flex-direction: column; gap: 12px;
+    }
+    .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── トースト ── */
+    .toast {
+      position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+      background: var(--text); color: #fff;
+      padding: 10px 20px; border-radius: 8px;
+      font-size: 13px; z-index: 200;
+      opacity: 0; transition: opacity 0.3s;
+      white-space: nowrap;
+    }
+    .toast.show { opacity: 1; }
+
+    /* ── 空状態 ── */
+    .empty-state { text-align: center; padding: 40px 0; font-size: 13px; color: var(--text-light); font-style: italic; }
+
+    /* ── スペース選択 ── */
+    .space-select-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+    .space-select-row select { flex: 1; }
+
+    /* ── 区切り ── */
+    hr { border: none; border-top: 1px solid var(--border-light); margin: 16px 0; }
+  </style>
+</head>
+<body>
+
+<!-- ローディング -->
+<div id="loading">
+  <div class="spinner"></div>
+  <p style="font-size:13px;color:var(--text-light)">読み込み中…</p>
+</div>
+
+<!-- ログイン画面 -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-icon">🔐</div>
+    <div class="login-title">GALLERY ADMIN</div>
+    <div class="login-sub">管理者パスワードを入力してください</div>
+    <div class="field-row">
+      <input class="field" id="admin-pw" type="password" placeholder="パスワード" />
+      <p class="err-msg" id="admin-pw-err" style="display:none">パスワードが違います</p>
+    </div>
+    <button class="btn btn-primary" onclick="adminLogin()" style="width:100%">ログイン</button>
+  </div>
+</div>
+
+<!-- メイン画面 -->
+<div id="main-screen">
+  <div class="top-bar">
+    <div class="top-bar-title">GALLERY ADMIN</div>
+    <button class="logout-btn" onclick="adminLogout()">ログアウト</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('tab-spaces')" id="tab-btn-spaces">スペース管理</button>
+    <button class="tab-btn" onclick="switchTab('tab-import')" id="tab-btn-import">データ取込</button>
+    <button class="tab-btn" onclick="switchTab('tab-reports')" id="tab-btn-reports">通報 <span class="badge" id="report-badge" style="display:none">0</span></button>
+    <button class="tab-btn" onclick="switchTab('tab-messages')" id="tab-btn-messages">メッセージ管理</button>
+    <button class="tab-btn" onclick="switchTab('tab-qr')" id="tab-btn-qr">QRコード</button>
+  </div>
+
+  <!-- ── タブ: スペース管理 ── -->
+  <div class="tab-content active" id="tab-spaces">
+    <div class="card">
+      <div class="card-title">スペース一覧</div>
+      <div id="spaces-list"><div class="empty-state">読み込み中…</div></div>
+      <hr>
+      <button class="btn btn-primary btn-sm" onclick="addNewSpace()">＋ 新しいスペースを追加</button>
+    </div>
+  </div>
+
+  <!-- ── タブ: データ取込 ── -->
+  <div class="tab-content" id="tab-import">
+    <div class="card">
+      <div class="card-title">ブックマークキューから取込</div>
+      <div class="queue-status">
+        <span id="queue-count-label" class="queue-empty">キューを確認中…</span>
+        <button class="btn btn-sm btn-ghost" onclick="checkQueue()">🔄 更新</button>
+      </div>
+      <div id="queue-preview-area"></div>
+      <div class="btn-row">
+        <button class="btn btn-success" id="import-btn" onclick="importQueue()" disabled>📥 キューを取り込む</button>
+        <button class="btn btn-ghost btn-sm" onclick="clearQueue()">キューをクリア</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">手動でスペースを編集</div>
+      <p style="font-size:12px;color:var(--text-light);margin-bottom:12px">取込後に細かい修正が必要な場合は「スペース管理」タブから編集できます</p>
+      <button class="btn btn-ghost btn-sm" onclick="switchTab('tab-spaces')">→ スペース管理へ</button>
+    </div>
+  </div>
+
+  <!-- ── タブ: 通報 ── -->
+  <div class="tab-content" id="tab-reports">
+    <div class="card">
+      <div class="card-title">通報・通知一覧</div>
+      <div id="reports-list"><div class="empty-state">通報はありません</div></div>
+    </div>
+  </div>
+
+  <!-- ── タブ: メッセージ管理 ── -->
+  <div class="tab-content" id="tab-messages">
+    <div class="card">
+      <div class="card-title">スペースを選択</div>
+      <div class="space-select-row">
+        <select class="field" id="msg-space-select" onchange="loadMessages()">
+          <option value="">-- スペースを選択 --</option>
+        </select>
+      </div>
+      <div id="messages-list"><div class="empty-state">スペースを選択してください</div></div>
+    </div>
+  </div>
+
+  <!-- ── タブ: QRコード ── -->
+  <div class="tab-content" id="tab-qr">
+    <div class="card">
+      <div class="card-title">QRコード発行</div>
+      <div class="field-row">
+        <label class="field-label">スペースを選択</label>
+        <select class="field" id="qr-space-select" onchange="generateQR()">
+          <option value="">-- スペースを選択 --</option>
+        </select>
+      </div>
+      <div class="qr-section" id="qr-section" style="display:none">
+        <div id="qr-canvas"></div>
+        <div class="qr-url" id="qr-url"></div>
+        <div class="btn-row" style="justify-content:center;margin-top:14px">
+          <button class="btn btn-primary btn-sm" onclick="downloadQR()">⬇ 画像をダウンロード</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">チャットページのベースURL</div>
+      <p style="font-size:12px;color:var(--text-light);margin-bottom:8px">QRコードが指すURLです。スペースIDがURLパラメータに付きます</p>
+      <input class="field" id="base-url-input" value="https://designfesta-jp.github.io/dfg-message-board/dfg-message-board.html" />
+      <p style="font-size:11px;color:var(--text-light);margin-top:6px">例: ?space=space-1 のように付加されます</p>
+    </div>
+  </div>
+</div>
+
+<!-- トースト -->
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc,
+  onSnapshot, query, orderBy, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+// ── Firebase設定 ──────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyAFdBPTqPUwHALpFYxy1L-XgxaFcHJpKrI",
+  authDomain: "dfg-message-board.firebaseapp.com",
+  projectId: "dfg-message-board",
+  storageBucket: "dfg-message-board.firebasestorage.app",
+  messagingSenderId: "257856032842",
+  appId: "1:257856032842:web:07ff7a53077326845f96b3"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+
+// ── 管理者パスワード（本番では環境変数等で管理推奨） ──
+const ADMIN_PASSWORD = "admin123";
+
+// ── 状態 ──────────────────────────────────────────────────
+let spaces  = [];   // [{id, name, artist, period, sns:[], exhibitorPassword, active}]
+let reports = [];
+let currentMessages = [];
+
+// ── parseText（dfg-generatorと同じロジック） ─────────────
+function parseText(raw) {
+  const lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const d = { title:'', space:'', floor:'', period:'', genre:'', content:'', concept:'', artistName:'', members:'', profile:'', sns:'' };
+  const KEYS = { 'スペース':'space','会期':'period','ジャンル':'genre','展示内容':'content','展示コンセプト':'concept','アーティスト名':'artistName','メンバー構成':'members','プロフィール':'profile','SNS':'sns','展示情報':null,'アーティスト情報':null };
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^「.+」$/.test(line)) { d.title = line.replace(/^「|」$/g, ''); i++; continue; }
+    if (line === '展示情報' && i > 0 && !d.title) { d.title = lines[i-1]; i++; continue; }
+    if (/^https?:\/\//.test(line)) { if (!d.sns) d.sns = line; i++; continue; }
+    if (line === 'スペース') {
+      if (lines[i+1]) d.space = lines[i+1];
+      if (lines[i+2] && !/^展示|^アーティスト|^会期|^ジャンル|^スペース/.test(lines[i+2])) { d.floor = lines[i+2]; i += 3; } else { i += 2; }
+      continue;
+    }
+    if (KEYS[line] !== undefined) {
+      const key = KEYS[line];
+      if (key === null) { i++; continue; }
+      if (key === 'sns') { if (lines[i+1] && /^https?:\/\//.test(lines[i+1])) { d.sns = lines[i+1]; i += 2; } else { i++; } continue; }
+      i++;
+      let val = '';
+      while (i < lines.length && KEYS[lines[i]] === undefined && !/^「.+」$/.test(lines[i]) && !/^https?:\/\//.test(lines[i])) { val += (val ? '\n' : '') + lines[i]; i++; }
+      d[key] = val.trim();
+      continue;
+    }
+    i++;
+  }
+  return d;
+}
+
+// ── SNS種別判定 ──────────────────────────────────────────
+function detectSnsType(url) {
+  if (/instagram\.com/i.test(url)) return 'instagram';
+  if (/twitter\.com|x\.com/i.test(url)) return 'x';
+  if (/facebook\.com/i.test(url)) return 'facebook';
+  return 'website';
+}
+
+// ── ユーティリティ ────────────────────────────────────────
+function showToast(msg, duration = 2500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), duration);
+}
+
+function genSpaceId() {
+  return 'space-' + Date.now();
+}
+
+function escHtml(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── 初期化 ────────────────────────────────────────────────
+async function init() {
+  document.getElementById('loading').style.display = 'none';
+
+  // Enterキーでログイン
+  document.getElementById('admin-pw').addEventListener('keydown', e => {
+    if (e.key === 'Enter') window.adminLogin();
+  });
+}
+
+// ── ログイン ──────────────────────────────────────────────
+window.adminLogin = function() {
+  const pw = document.getElementById('admin-pw').value;
+  if (pw === ADMIN_PASSWORD) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('main-screen').style.display = 'block';
+    loadAll();
+  } else {
+    document.getElementById('admin-pw-err').style.display = 'block';
+    document.getElementById('admin-pw').value = '';
+  }
+};
+
+window.adminLogout = function() {
+  document.getElementById('main-screen').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('admin-pw').value = '';
+};
+
+// ── タブ切替 ──────────────────────────────────────────────
+window.switchTab = function(tabId) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById(tabId).classList.add('active');
+  document.getElementById('tab-btn-' + tabId.replace('tab-', '')).classList.add('active');
+  if (tabId === 'tab-import') checkQueue();
+};
+
+// ── 全データ読み込み ──────────────────────────────────────
+async function loadAll() {
+  await loadSpaces();
+  listenReports();
+  checkQueue();
+}
+
+// ── スペース読み込み ──────────────────────────────────────
+async function loadSpaces() {
+  const snap = await getDocs(collection(db, 'spaces'));
+  spaces = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  spaces.sort((a, b) => (a.id > b.id ? 1 : -1));
+  renderSpaces();
+  updateSelects();
+}
+
+function renderSpaces() {
+  const el = document.getElementById('spaces-list');
+  if (spaces.length === 0) { el.innerHTML = '<div class="empty-state">スペースがありません</div>'; return; }
+
+  el.innerHTML = spaces.map((sp, idx) => `
+    <div class="space-card" id="sp-card-${idx}">
+      <div class="space-card-header" onclick="toggleSpaceCard(${idx})">
+        <div class="${sp.active !== false ? 'active-dot' : 'inactive-dot'}"></div>
+        <div class="space-card-id">${escHtml(sp.id)}</div>
+        <div>
+          <div class="space-card-name">${escHtml(sp.name || '（タイトルなし）')}</div>
+          <div class="space-card-artist">${escHtml(sp.artist || '')}</div>
+        </div>
+        <span style="color:var(--text-light);font-size:18px">›</span>
+      </div>
+      <div class="space-card-body" id="sp-body-${idx}">
+        <div class="field-row">
+          <label class="field-label">スペースID（変更不可）</label>
+          <input class="field" value="${escHtml(sp.id)}" disabled style="opacity:0.5" />
+        </div>
+        <div class="field-row">
+          <label class="field-label">展示タイトル</label>
+          <input class="field" id="sp-name-${idx}" value="${escHtml(sp.name || '')}" />
+        </div>
+        <div class="field-row">
+          <label class="field-label">アーティスト名</label>
+          <input class="field" id="sp-artist-${idx}" value="${escHtml(sp.artist || '')}" />
+        </div>
+        <div class="field-row">
+          <label class="field-label">会期</label>
+          <input class="field" id="sp-period-${idx}" value="${escHtml(sp.period || '')}" />
+        </div>
+        <div class="field-row">
+          <label class="field-label">出展者パスワード</label>
+          <input class="field" id="sp-pw-${idx}" value="${escHtml(sp.exhibitorPassword || '')}" placeholder="パスワードを設定" />
+        </div>
+        <div class="field-row">
+          <label class="field-label">SNSリンク</label>
+          <div id="sp-sns-${idx}" style="margin-bottom:6px">
+            ${(sp.sns || []).map((s, si) => `
+              <span class="sns-tag">
+                ${escHtml(s.label || s.url)}
+                <button class="sns-remove" onclick="removeSns(${idx},${si})">×</button>
+              </span>
+            `).join('')}
+          </div>
+          <div style="display:flex;gap:6px">
+            <input class="field" id="sp-sns-input-${idx}" placeholder="https://..." style="flex:1" />
+            <button class="btn btn-ghost btn-sm" onclick="addSns(${idx})">追加</button>
+          </div>
+        </div>
+        <div class="field-row">
+          <label class="field-label">公開設定</label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="sp-active-${idx}" ${sp.active !== false ? 'checked' : ''} />
+            公開中（チェックを外すと来場者に表示されません）
+          </label>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary btn-sm" onclick="saveSpace(${idx})">💾 保存</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteSpace(${idx})">🗑 削除</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+window.toggleSpaceCard = function(idx) {
+  const body = document.getElementById('sp-body-' + idx);
+  body.classList.toggle('open');
+};
+
+window.addSns = function(idx) {
+  const input = document.getElementById('sp-sns-input-' + idx);
+  const url = input.value.trim();
+  if (!url || !/^https?:\/\//.test(url)) { showToast('URLはhttps://で始まる必要があります'); return; }
+  if (!spaces[idx].sns) spaces[idx].sns = [];
+  const type = detectSnsType(url);
+  const label = url.replace(/^https?:\/\//, '').replace(/\/$/, '').split('/').slice(0, 2).join('/');
+  spaces[idx].sns.push({ type, url, label });
+  input.value = '';
+  renderSpaces();
+  document.getElementById('sp-body-' + idx).classList.add('open');
+};
+
+window.removeSns = function(idx, si) {
+  spaces[idx].sns.splice(si, 1);
+  renderSpaces();
+  document.getElementById('sp-body-' + idx).classList.add('open');
+};
+
+window.saveSpace = async function(idx) {
+  const sp = spaces[idx];
+  const updated = {
+    name: document.getElementById('sp-name-' + idx).value.trim(),
+    artist: document.getElementById('sp-artist-' + idx).value.trim(),
+    period: document.getElementById('sp-period-' + idx).value.trim(),
+    exhibitorPassword: document.getElementById('sp-pw-' + idx).value.trim(),
+    sns: sp.sns || [],
+    active: document.getElementById('sp-active-' + idx).checked,
+    updatedAt: serverTimestamp(),
+  };
+  await setDoc(doc(db, 'spaces', sp.id), updated, { merge: true });
+  Object.assign(spaces[idx], updated);
+  showToast('✓ 保存しました');
+  renderSpaces();
+  updateSelects();
+};
+
+window.addNewSpace = function() {
+  const id = prompt('新しいスペースIDを入力してください\n例: space-5, space-A-01');
+  if (!id || !id.trim()) return;
+  const newSp = { id: id.trim(), name: '', artist: '', period: '', sns: [], exhibitorPassword: '', active: true };
+  spaces.push(newSp);
+  renderSpaces();
+  const idx = spaces.length - 1;
+  document.getElementById('sp-body-' + idx).classList.add('open');
+};
+
+window.deleteSpace = async function(idx) {
+  if (!confirm(`「${spaces[idx].name || spaces[idx].id}」を削除しますか？\nメッセージは削除されません。`)) return;
+  // Firestoreではドキュメントを削除（サブコレクションは残る）
+  // 必要なら手動でFirestoreコンソールから削除
+  spaces.splice(idx, 1);
+  renderSpaces();
+  showToast('削除しました（Firestoreへの反映はコンソールから行ってください）');
+};
+
+// ── キュー取込 ────────────────────────────────────────────
+window.checkQueue = function() {
+  try {
+    const q = JSON.parse(localStorage.getItem('dfg_queue') || '[]');
+    const label = document.getElementById('queue-count-label');
+    const btn = document.getElementById('import-btn');
+    const preview = document.getElementById('queue-preview-area');
+
+    if (q.length === 0) {
+      label.className = 'queue-empty';
+      label.textContent = 'キューにデータがありません（展示ページでブックマークを実行してください）';
+      btn.disabled = true;
+      preview.innerHTML = '';
+      return;
+    }
+
+    label.className = 'queue-count';
+    label.textContent = `📦 ${q.length}件のデータがキューにあります`;
+    btn.disabled = false;
+
+    preview.innerHTML = q.map((raw, i) => {
+      const d = parseText(raw);
+      return `
+        <div class="queue-preview">
+          <div class="preview-title">${escHtml(d.title || '（タイトルなし）')}</div>
+          <div>アーティスト: <strong>${escHtml(d.artistName || '—')}</strong></div>
+          ${d.period ? `<div>会期: <strong>${escHtml(d.period)}</strong></div>` : ''}
+          ${d.space ? `<div>スペース: <strong>${escHtml(d.space)}</strong></div>` : ''}
+          ${d.sns ? `<div>SNS: <strong>${escHtml(d.sns)}</strong></div>` : ''}
+        </div>
+      `;
+    }).join('');
+  } catch(e) {
+    console.error(e);
+  }
+};
+
+window.importQueue = async function() {
+  try {
+    const q = JSON.parse(localStorage.getItem('dfg_queue') || '[]');
+    if (q.length === 0) { showToast('キューにデータがありません'); return; }
+
+    let count = 0;
+    for (const raw of q) {
+      const d = parseText(raw);
+      const spaceId = d.space ? 'space-' + d.space.replace(/\s+/g, '-').toLowerCase() : genSpaceId();
+      const snsArr = d.sns ? [{ type: detectSnsType(d.sns), url: d.sns, label: d.sns.replace(/^https?:\/\//, '').replace(/\/$/, '') }] : [];
+
+      await setDoc(doc(db, 'spaces', spaceId), {
+        name: d.title || '',
+        artist: d.artistName || '',
+        period: d.period || '',
+        exhibitorPassword: '',
+        sns: snsArr,
+        active: true,
+        spaceNumber: d.space || '',
+        floor: d.floor || '',
+        importedAt: serverTimestamp(),
+      }, { merge: true });
+      count++;
+    }
+
+    localStorage.removeItem('dfg_queue');
+    showToast(`✓ ${count}件を取り込みました`);
+    await loadSpaces();
+    switchTab('tab-spaces');
+  } catch(e) {
+    console.error(e);
+    showToast('取り込みに失敗しました');
+  }
+};
+
+window.clearQueue = function() {
+  if (!confirm('キューをクリアしますか？')) return;
+  localStorage.removeItem('dfg_queue');
+  checkQueue();
+  showToast('キューをクリアしました');
+};
+
+// ── 通報 ──────────────────────────────────────────────────
+function listenReports() {
+  const q = query(collection(db, 'reports'), orderBy('createdAt', 'desc'));
+  onSnapshot(q, snap => {
+    reports = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderReports();
+    const unread = reports.filter(r => !r.read).length;
+    const badge = document.getElementById('report-badge');
+    badge.style.display = unread > 0 ? 'inline' : 'none';
+    badge.textContent = unread;
+  });
+}
+
+function renderReports() {
+  const el = document.getElementById('reports-list');
+  if (reports.length === 0) { el.innerHTML = '<div class="empty-state">通報はありません</div>'; return; }
+
+  el.innerHTML = reports.map(rep => `
+    <div class="report-card ${rep.read ? '' : 'unread'}">
+      <div class="report-meta">
+        <span>${escHtml(rep.date || '')}</span>
+        <span>${escHtml(rep.spaceName || rep.spaceId || '')}</span>
+        ${!rep.read ? '<span class="new-badge">NEW</span>' : ''}
+      </div>
+      <span class="report-type-badge ${rep.type === 'hide' ? 'type-hide' : 'type-notify'}">
+        ${rep.type === 'hide' ? '🚫 非公開処理済' : '📢 通知のみ'}
+      </span>
+      <div class="report-msg-box">「${escHtml(rep.msgText || '')}」</div>
+      ${rep.reason ? `<div class="report-reason">理由: ${escHtml(rep.reason)}</div>` : ''}
+      ${rep.note ? `<div class="report-note">メモ: ${escHtml(rep.note)}</div>` : ''}
+      <div class="btn-row" style="margin-top:8px">
+        ${!rep.read ? `<button class="btn btn-ghost btn-sm" onclick="markRead('${rep.id}')">既読にする</button>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+window.markRead = async function(repId) {
+  await updateDoc(doc(db, 'reports', repId), { read: true });
+  showToast('既読にしました');
+};
+
+// ── メッセージ管理 ────────────────────────────────────────
+window.loadMessages = async function() {
+  const spaceId = document.getElementById('msg-space-select').value;
+  const el = document.getElementById('messages-list');
+  if (!spaceId) { el.innerHTML = '<div class="empty-state">スペースを選択してください</div>'; return; }
+
+  el.innerHTML = '<div class="empty-state">読み込み中…</div>';
+  const q = query(collection(db, 'spaces', spaceId, 'messages'), orderBy('createdAt', 'desc'));
+  const snap = await getDocs(q);
+  currentMessages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  if (currentMessages.length === 0) { el.innerHTML = '<div class="empty-state">メッセージがありません</div>'; return; }
+
+  el.innerHTML = currentMessages.map(msg => `
+    <div class="msg-card ${msg.deleted ? 'deleted-msg' : msg.hidden ? 'hidden-msg' : ''}">
+      <div class="msg-content">
+        <div class="msg-sender">${msg.isExhibitor ? '🏷 出展者' : escHtml(msg.sender || '匿名')}</div>
+        <div class="msg-text">${escHtml(msg.text || '')}</div>
+        <div class="msg-time">${escHtml(msg.timeStr || '')}</div>
+        ${msg.hidden ? `<div class="msg-status">${msg.hiddenBy === 'admin' ? '管理者によって非公開' : '出展者によって非公開'}</div>` : ''}
+        ${msg.deleted ? `<div class="msg-status">管理者によって削除</div>` : ''}
+      </div>
+      <div class="msg-actions">
+        ${!msg.hidden && !msg.deleted ? `<button class="btn btn-ghost btn-sm" onclick="adminHide('${spaceId}','${msg.id}')">非公開</button>` : ''}
+        ${!msg.deleted ? `<button class="btn btn-danger btn-sm" onclick="adminDelete('${spaceId}','${msg.id}')">削除</button>` : ''}
+        ${msg.hidden || msg.deleted ? `<button class="btn btn-success btn-sm" onclick="adminRestore('${spaceId}','${msg.id}')">復元</button>` : ''}
+      </div>
+    </div>
+  `).join('');
+};
+
+window.adminHide = async function(spaceId, msgId) {
+  await updateDoc(doc(db, 'spaces', spaceId, 'messages', msgId), { hidden: true, hiddenBy: 'admin' });
+  showToast('非公開にしました');
+  loadMessages();
+};
+
+window.adminDelete = async function(spaceId, msgId) {
+  if (!confirm('このメッセージを削除しますか？（ログには残ります）')) return;
+  await updateDoc(doc(db, 'spaces', spaceId, 'messages', msgId), { deleted: true, hiddenBy: 'admin' });
+  showToast('削除しました');
+  loadMessages();
+};
+
+window.adminRestore = async function(spaceId, msgId) {
+  await updateDoc(doc(db, 'spaces', spaceId, 'messages', msgId), { hidden: false, deleted: false, hiddenBy: null });
+  showToast('復元しました');
+  loadMessages();
+};
+
+// ── セレクト更新 ──────────────────────────────────────────
+function updateSelects() {
+  const opts = spaces.map(sp => `<option value="${sp.id}">${escHtml(sp.name || sp.id)}</option>`).join('');
+  document.getElementById('msg-space-select').innerHTML = '<option value="">-- スペースを選択 --</option>' + opts;
+  document.getElementById('qr-space-select').innerHTML = '<option value="">-- スペースを選択 --</option>' + opts;
+}
+
+// ── QRコード ──────────────────────────────────────────────
+window.generateQR = function() {
+  const spaceId = document.getElementById('qr-space-select').value;
+  const section = document.getElementById('qr-section');
+  if (!spaceId) { section.style.display = 'none'; return; }
+
+  const baseUrl = document.getElementById('base-url-input').value.trim();
+  const url = `${baseUrl}?space=${spaceId}`;
+
+  document.getElementById('qr-url').textContent = url;
+  const canvas = document.getElementById('qr-canvas');
+  canvas.innerHTML = '';
+
+  new QRCode(canvas, {
+    text: url,
+    width: 200, height: 200,
+    colorDark: '#2c2416',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M,
+  });
+
+  section.style.display = 'block';
+};
+
+window.downloadQR = function() {
+  const canvas = document.querySelector('#qr-canvas canvas');
+  if (!canvas) return;
+  const spaceId = document.getElementById('qr-space-select').value;
+  const a = document.createElement('a');
+  a.download = `qr-${spaceId}.png`;
+  a.href = canvas.toDataURL();
+  a.click();
+};
+
+// ── 起動 ──────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
