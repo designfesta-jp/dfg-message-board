@@ -417,8 +417,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
-import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc,
-  onSnapshot, query, orderBy, serverTimestamp }
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc,
+  onSnapshot, query, orderBy, where, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 // ── Firebase設定 ──────────────────────────────────────────
@@ -644,30 +644,42 @@ window.removeSns = function(idx, si) {
 
 window.saveSpace = async function(idx) {
   const sp = spaces[idx];
-  const updated = {
-    name: document.getElementById('sp-name-' + idx).value.trim(),
-    artist: document.getElementById('sp-artist-' + idx).value.trim(),
-    period: document.getElementById('sp-period-' + idx).value.trim(),
-    exhibitorPassword: document.getElementById('sp-pw-' + idx).value.trim(),
-    sns: sp.sns || [],
-    active: document.getElementById('sp-active-' + idx).checked,
-    updatedAt: serverTimestamp(),
-  };
-  await setDoc(doc(db, 'spaces', sp.id), updated, { merge: true });
-  Object.assign(spaces[idx], updated);
-  showToast('✓ 保存しました');
-  renderSpaces();
-  updateSelects();
+  const saveBtn = document.querySelector(`#sp-body-${idx} .btn-primary`);
+  if (saveBtn) { saveBtn.textContent = '保存中…'; saveBtn.disabled = true; }
+  try {
+    const updated = {
+      name: document.getElementById('sp-name-' + idx).value.trim(),
+      artist: document.getElementById('sp-artist-' + idx).value.trim(),
+      period: document.getElementById('sp-period-' + idx).value.trim(),
+      exhibitorPassword: document.getElementById('sp-pw-' + idx).value.trim(),
+      sns: sp.sns || [],
+      active: document.getElementById('sp-active-' + idx).checked,
+      updatedAt: serverTimestamp(),
+    };
+    await setDoc(doc(db, 'spaces', sp.id), updated, { merge: true });
+    Object.assign(spaces[idx], updated);
+    showToast('✓ Firestoreに保存しました');
+    renderSpaces();
+    updateSelects();
+    document.getElementById('sp-body-' + idx).classList.add('open');
+  } catch(e) {
+    console.error(e);
+    showToast('❌ 保存に失敗しました: ' + e.message);
+    if (saveBtn) { saveBtn.textContent = '💾 保存'; saveBtn.disabled = false; }
+  }
 };
 
 window.addNewSpace = function() {
-  const id = prompt('新しいスペースIDを入力してください\n例: space-5, space-A-01');
+  const id = prompt('新しいスペースIDを入力してください\n例: space-5\n\n※保存ボタンを押すまでFirestoreには登録されません');
   if (!id || !id.trim()) return;
-  const newSp = { id: id.trim(), name: '', artist: '', period: '', sns: [], exhibitorPassword: '', active: true };
+  const trimId = id.trim();
+  if (spaces.find(s => s.id === trimId)) { showToast('そのIDはすでに存在します'); return; }
+  const newSp = { id: trimId, name: '', artist: '', period: '', sns: [], exhibitorPassword: '', active: true };
   spaces.push(newSp);
   renderSpaces();
   const idx = spaces.length - 1;
   document.getElementById('sp-body-' + idx).classList.add('open');
+  showToast('入力後に「💾 保存」を押してください');
 };
 
 window.deleteSpace = async function(idx) {
@@ -679,15 +691,20 @@ window.deleteSpace = async function(idx) {
   showToast('削除しました（Firestoreへの反映はコンソールから行ってください）');
 };
 
-// ── キュー取込 ────────────────────────────────────────────
-window.checkQueue = function() {
-  try {
-    const q = JSON.parse(localStorage.getItem('dfg_queue') || '[]');
-    const label = document.getElementById('queue-count-label');
-    const btn = document.getElementById('import-btn');
-    const preview = document.getElementById('queue-preview-area');
+// ── キュー取込（Firestore版） ─────────────────────────────
+let queueDocs = []; // Firestoreから取得したキューを保持
 
-    if (q.length === 0) {
+window.checkQueue = async function() {
+  const label = document.getElementById('queue-count-label');
+  const btn = document.getElementById('import-btn');
+  const preview = document.getElementById('queue-preview-area');
+  label.textContent = '確認中…';
+
+  try {
+    const snap = await getDocs(query(collection(db, 'import_queue'), where('imported', '==', false), orderBy('createdAt', 'asc')));
+    queueDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    if (queueDocs.length === 0) {
       label.className = 'queue-empty';
       label.textContent = 'キューにデータがありません（展示ページでブックマークを実行してください）';
       btn.disabled = true;
@@ -696,11 +713,11 @@ window.checkQueue = function() {
     }
 
     label.className = 'queue-count';
-    label.textContent = `📦 ${q.length}件のデータがキューにあります`;
+    label.textContent = `📦 ${queueDocs.length}件のデータがキューにあります`;
     btn.disabled = false;
 
-    preview.innerHTML = q.map((raw, i) => {
-      const d = parseText(raw);
+    preview.innerHTML = queueDocs.map(item => {
+      const d = parseText(item.raw || '');
       return `
         <div class="queue-preview">
           <div class="preview-title">${escHtml(d.title || '（タイトルなし）')}</div>
@@ -713,17 +730,17 @@ window.checkQueue = function() {
     }).join('');
   } catch(e) {
     console.error(e);
+    label.textContent = '読み込みに失敗しました';
   }
 };
 
 window.importQueue = async function() {
-  try {
-    const q = JSON.parse(localStorage.getItem('dfg_queue') || '[]');
-    if (q.length === 0) { showToast('キューにデータがありません'); return; }
+  if (queueDocs.length === 0) { showToast('キューにデータがありません'); return; }
 
+  try {
     let count = 0;
-    for (const raw of q) {
-      const d = parseText(raw);
+    for (const item of queueDocs) {
+      const d = parseText(item.raw || '');
       const spaceId = d.space ? 'space-' + d.space.replace(/\s+/g, '-').toLowerCase() : genSpaceId();
       const snsArr = d.sns ? [{ type: detectSnsType(d.sns), url: d.sns, label: d.sns.replace(/^https?:\/\//, '').replace(/\/$/, '') }] : [];
 
@@ -738,10 +755,13 @@ window.importQueue = async function() {
         floor: d.floor || '',
         importedAt: serverTimestamp(),
       }, { merge: true });
+
+      // 取り込み済みにマーク
+      await updateDoc(doc(db, 'import_queue', item.id), { imported: true });
       count++;
     }
 
-    localStorage.removeItem('dfg_queue');
+    queueDocs = [];
     showToast(`✓ ${count}件を取り込みました`);
     await loadSpaces();
     switchTab('tab-spaces');
@@ -751,11 +771,20 @@ window.importQueue = async function() {
   }
 };
 
-window.clearQueue = function() {
+window.clearQueue = async function() {
   if (!confirm('キューをクリアしますか？')) return;
-  localStorage.removeItem('dfg_queue');
-  checkQueue();
-  showToast('キューをクリアしました');
+  try {
+    const snap = await getDocs(query(collection(db, 'import_queue'), where('imported', '==', false)));
+    for (const d of snap.docs) {
+      await deleteDoc(doc(db, 'import_queue', d.id));
+    }
+    queueDocs = [];
+    checkQueue();
+    showToast('キューをクリアしました');
+  } catch(e) {
+    console.error(e);
+    showToast('クリアに失敗しました');
+  }
 };
 
 // ── 通報 ──────────────────────────────────────────────────
