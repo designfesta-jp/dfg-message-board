@@ -289,6 +289,8 @@
     <!-- プロフィール付箋 -->
     <div class="profile-note" id="profile-note">
       <div class="pin"></div>
+      <p id="space-spacenum" style="font-size:12px;font-weight:700;color:#8b6f47;margin-bottom:2px"></p>
+      <p id="space-booth" style="font-size:11px;color:#a08c6e;margin-bottom:2px;display:none"></p>
       <h2 id="space-title">—</h2>
       <p class="artist" id="space-artist"></p>
       <p class="period" id="space-period"></p>
@@ -498,10 +500,13 @@ async function init() {
       name: "記憶の断片",
       artist: "山田 花子",
       period: "2026年4月19日 〜 5月3日",
+      spaceNumber: "1-A",
+      booth: "",
       sns: [
         { type:"instagram", url:"https://instagram.com/demo", label:"@demo_art" },
       ],
       exhibitorPassword: "passA",
+      maxLength: 200,
     };
   } else {
     spaceData = spaceSnap.data();
@@ -512,6 +517,17 @@ async function init() {
   document.getElementById("space-artist").textContent = spaceData.artist || "";
   document.getElementById("space-period").textContent = spaceData.period || "";
   document.getElementById("welcome-space-name").textContent = spaceData.name;
+
+  // スペース名・ブース
+  const spaceNumEl = document.getElementById("space-spacenum");
+  if (spaceData.spaceNumber) { spaceNumEl.textContent = spaceData.spaceNumber; }
+  const boothEl = document.getElementById("space-booth");
+  if (spaceData.booth) { boothEl.textContent = spaceData.booth; boothEl.style.display = "block"; }
+
+  // 文字数制限をグローバルに設定
+  window.MAX_LENGTH = spaceData.maxLength || 200;
+  document.getElementById("write-textarea").maxLength = window.MAX_LENGTH;
+  document.getElementById("write-count").textContent = "0 / " + window.MAX_LENGTH;
 
   // SNSリンク
   const snsWrap = document.getElementById("sns-links");
@@ -620,8 +636,9 @@ window.closeWrite = function() {
 };
 
 window.updateCount = function() {
+  const max = window.MAX_LENGTH || 200;
   const len = document.getElementById("write-textarea").value.length;
-  document.getElementById("write-count").textContent = `${len} / 200`;
+  document.getElementById("write-count").textContent = `${len} / ${max}`;
   document.getElementById("post-btn").disabled = len === 0;
 };
 

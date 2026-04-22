@@ -337,6 +337,12 @@
       <div class="card-title">スペース一覧</div>
       <div id="spaces-list"><div class="empty-state">読み込み中…</div></div>
       <hr>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--text-mid)">文字数制限を一括設定:</span>
+        <input type="number" id="bulk-maxlen" class="field" min="10" max="1000" value="200" style="width:80px" />
+        <span style="font-size:12px;color:var(--text-light)">文字</span>
+        <button class="btn btn-ghost btn-sm" onclick="bulkSetMaxLength()">全スペースに適用</button>
+      </div>
       <button class="btn btn-primary btn-sm" onclick="addNewSpace()">＋ 新しいスペースを追加</button>
     </div>
   </div>
@@ -576,7 +582,8 @@ function renderSpaces() {
         <!-- プレビュー -->
         <div id="sp-preview-${idx}" style="background:#faf6ef;border:1px solid #e0d5c3;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-family:'Noto Serif JP',serif;">
           <div style="font-size:11px;color:#a08c6e;margin-bottom:6px;letter-spacing:1px;">📌 プロフィール付箋のプレビュー</div>
-          <div id="sp-preview-booth-${idx}" style="font-size:11px;color:#a08c6e;margin-bottom:2px;display:${sp.boothNumber ? 'block' : 'none'}">${escHtml(sp.boothNumber || '')}</div>
+          <div id="sp-preview-spacenum-${idx}" style="font-size:12px;color:#8b6f47;font-weight:700;margin-bottom:2px">${escHtml(sp.spaceNumber || '')}</div>
+          <div id="sp-preview-booth-${idx}" style="font-size:11px;color:#a08c6e;margin-bottom:2px;display:${sp.booth ? 'block' : 'none'}">${escHtml(sp.booth || '')}</div>
           <div id="sp-preview-name-${idx}" style="font-size:16px;font-weight:700;color:#2c2416;margin-bottom:3px">${escHtml(sp.name || '（タイトルなし）')}</div>
           <div id="sp-preview-artist-${idx}" style="font-size:12px;color:#6b5a42;margin-bottom:2px">${escHtml(sp.artist || '')}</div>
           <div id="sp-preview-period-${idx}" style="font-size:11px;color:#a08c6e">${escHtml(sp.period || '')}</div>
@@ -587,8 +594,13 @@ function renderSpaces() {
           <input class="field" value="${escHtml(sp.id)}" disabled style="opacity:0.5" />
         </div>
         <div class="field-row">
-          <label class="field-label">ブース番号（任意）</label>
-          <input class="field" id="sp-booth-${idx}" value="${escHtml(sp.boothNumber || '')}" placeholder="例: 1-A （空欄の場合は非表示）"
+          <label class="field-label">スペース名（例: 1-A）</label>
+          <input class="field" id="sp-spacenum-${idx}" value="${escHtml(sp.spaceNumber || '')}" placeholder="例: 1-A, WEST アートコーナー"
+            oninput="updatePreview(${idx})" />
+        </div>
+        <div class="field-row">
+          <label class="field-label">ブース（任意・空欄なら非表示）</label>
+          <input class="field" id="sp-booth-${idx}" value="${escHtml(sp.booth || '')}" placeholder="例: ブースB"
             oninput="updatePreview(${idx})" />
         </div>
         <div class="field-row">
@@ -608,7 +620,7 @@ function renderSpaces() {
         </div>
         <div class="field-row">
           <label class="field-label">出展者パスワード</label>
-          <input class="field" id="sp-pw-${idx}" value="${escHtml(sp.exhibitorPassword || '')}" placeholder="パスワードを設定" />
+          <input class="field" id="sp-pw-${idx}" value="${escHtml(sp.exhibitorPassword || '')}" placeholder="パスワードを設定（4文字以上推奨）" />
         </div>
         <div class="field-row">
           <label class="field-label">SNSリンク</label>
@@ -623,6 +635,14 @@ function renderSpaces() {
           <div style="display:flex;gap:6px">
             <input class="field" id="sp-sns-input-${idx}" placeholder="https://..." style="flex:1" />
             <button class="btn btn-ghost btn-sm" onclick="addSns(${idx})">追加</button>
+          </div>
+        </div>
+        <div class="field-row">
+          <label class="field-label">文字数制限（付箋1枚あたり）</label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input class="field" id="sp-maxlen-${idx}" type="number" min="10" max="1000"
+              value="${sp.maxLength || 200}" style="width:100px" />
+            <span style="font-size:12px;color:var(--text-light)">文字（デフォルト: 200）</span>
           </div>
         </div>
         <div class="field-row">
@@ -642,10 +662,13 @@ function renderSpaces() {
 }
 
 window.updatePreview = function(idx) {
-  const name   = document.getElementById('sp-name-'   + idx)?.value || '';
-  const artist = document.getElementById('sp-artist-' + idx)?.value || '';
-  const period = document.getElementById('sp-period-' + idx)?.value || '';
-  const booth  = document.getElementById('sp-booth-'  + idx)?.value || '';
+  const name      = document.getElementById('sp-name-'     + idx)?.value || '';
+  const artist    = document.getElementById('sp-artist-'   + idx)?.value || '';
+  const period    = document.getElementById('sp-period-'   + idx)?.value || '';
+  const booth     = document.getElementById('sp-booth-'    + idx)?.value || '';
+  const spacenum  = document.getElementById('sp-spacenum-' + idx)?.value || '';
+  const spacenumEl = document.getElementById('sp-preview-spacenum-' + idx);
+  if (spacenumEl) spacenumEl.textContent = spacenum;
   const boothEl = document.getElementById('sp-preview-booth-' + idx);
   if (boothEl) { boothEl.textContent = booth; boothEl.style.display = booth ? 'block' : 'none'; }
   const nameEl = document.getElementById('sp-preview-name-' + idx);
@@ -689,7 +712,9 @@ window.saveSpace = async function(idx) {
       name: document.getElementById('sp-name-' + idx).value.trim(),
       artist: document.getElementById('sp-artist-' + idx).value.trim(),
       period: document.getElementById('sp-period-' + idx).value.trim(),
-      boothNumber: document.getElementById('sp-booth-' + idx).value.trim(),
+      spaceNumber: document.getElementById('sp-spacenum-' + idx).value.trim(),
+      booth: document.getElementById('sp-booth-' + idx).value.trim(),
+      maxLength: parseInt(document.getElementById('sp-maxlen-' + idx).value) || 200,
       exhibitorPassword: document.getElementById('sp-pw-' + idx).value.trim(),
       sns: sp.sns || [],
       active: document.getElementById('sp-active-' + idx).checked,
@@ -719,6 +744,20 @@ window.addNewSpace = function() {
   const idx = spaces.length - 1;
   document.getElementById('sp-body-' + idx).classList.add('open');
   showToast('入力後に「💾 保存」を押してください');
+};
+
+window.bulkSetMaxLength = async function() {
+  const val = parseInt(document.getElementById('bulk-maxlen').value) || 200;
+  if (!confirm(`全スペースの文字数制限を${val}文字に設定しますか？`)) return;
+  try {
+    for (const sp of spaces) {
+      await setDoc(doc(db, 'spaces', sp.id), { maxLength: val }, { merge: true });
+    }
+    showToast(`✓ 全スペースを${val}文字に設定しました`);
+  } catch(e) {
+    console.error(e);
+    showToast('設定に失敗しました');
+  }
 };
 
 window.deleteSpace = async function(idx) {
