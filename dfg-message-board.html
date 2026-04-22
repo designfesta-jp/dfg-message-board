@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Gallery Chat</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cork: #b87d35;
+      --cork-dark: #a06828;
+      --accent: #c49050;
+      --text: #2c2416;
+      --text-mid: #6b5a42;
+      --text-light: #a08c6e;
+      --white: #ffffff;
+      --modal-bg: rgba(44,36,22,0.58);
+    }
+
+    body {
+      font-family: 'Noto Serif JP', Georgia, serif;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: #8b6220;
+    }
+
+    /* ── コルクボード ── */
+    #board {
+      flex: 1;
+      overflow-y: auto;
+      background:
+        radial-gradient(ellipse at 18% 25%, rgba(200,150,80,0.22) 0%, transparent 55%),
+        radial-gradient(ellipse at 82% 72%, rgba(140,90,35,0.18) 0%, transparent 50%),
+        repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(100,60,10,0.04) 3px, rgba(100,60,10,0.04) 4px),
+        repeating-linear-gradient(90deg, transparent, transparent 3px, rgba(100,60,10,0.03) 3px, rgba(100,60,10,0.03) 4px),
+        linear-gradient(140deg, #c8964a 0%, #b07030 35%, #c49050 65%, #b07530 100%);
+      -webkit-overflow-scrolling: touch;
+    }
+
+    #board-inner {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 20px 14px 120px;
+    }
+
+    /* ── プロフィール付箋 ── */
+    .profile-note {
+      background: #FFFDE7;
+      border: 1px solid #FFD54F;
+      border-radius: 3px;
+      padding: 30px 18px 16px;
+      position: relative;
+      transform: rotate(-1deg);
+      box-shadow: 3px 5px 16px rgba(0,0,0,0.22), 0 1px 3px rgba(0,0,0,0.12);
+      margin-bottom: 6px;
+    }
+
+    .profile-note .pin {
+      width: 18px; height: 18px; border-radius: 50%;
+      background: radial-gradient(circle at 38% 32%, #ef5350, #b71c1c);
+      box-shadow: 0 3px 6px rgba(0,0,0,0.4);
+      position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    }
+
+    .profile-note h2 { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+    .profile-note .artist { font-size: 13px; color: var(--text-mid); margin-bottom: 3px; }
+    .profile-note .period { font-size: 11px; color: var(--text-light); margin-bottom: 12px; }
+
+    .sns-links { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .sns-link {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 11px; color: #8b6f47; text-decoration: none;
+      background: rgba(196,160,130,0.15); border-radius: 6px;
+      padding: 3px 9px; border: 1px solid rgba(196,160,130,0.3);
+    }
+
+    .exhibitor-login-btn {
+      font-size: 11px; color: var(--text-light); background: none;
+      border: 1px solid #ddd; border-radius: 6px;
+      padding: 4px 11px; cursor: pointer; font-family: inherit;
+    }
+    .exhibitor-badge { font-size: 11px; color: #8b6f47; font-weight: 700; }
+
+    /* ── 区切り ── */
+    .divider {
+      display: flex; align-items: center; gap: 10;
+      margin: 10px 0 18px;
+    }
+    .divider-line { flex: 1; height: 1px; background: rgba(255,255,255,0.22); }
+    .divider-label { font-size: 10px; color: rgba(255,255,255,0.45); letter-spacing: 2px; }
+
+    /* ── 付箋グリッド ── */
+    #notes-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px 12px;
+      align-items: start;
+    }
+
+    .empty-msg {
+      grid-column: 1/-1;
+      text-align: center;
+      color: rgba(255,255,255,0.45);
+      padding: 40px 0;
+      font-size: 13px;
+      font-style: italic;
+      line-height: 2;
+    }
+
+    /* ── 付箋 ── */
+    .sticky {
+      border-radius: 3px;
+      padding: 26px 12px 12px;
+      position: relative;
+      box-shadow: 2px 4px 10px rgba(0,0,0,0.2), 0 1px 2px rgba(0,0,0,0.1);
+      transition: transform 0.15s;
+    }
+    .sticky.hidden-note {
+      opacity: 0.5;
+      box-shadow: none;
+      background: #ddd !important;
+      border-color: #bbb !important;
+    }
+
+    .sticky .pin {
+      width: 13px; height: 13px; border-radius: 50%;
+      position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+      box-shadow: 0 2px 5px rgba(0,0,0,0.35);
+    }
+    .pin-visitor { background: radial-gradient(circle at 38% 32%, #ff8a80, #c62828); }
+    .pin-exhibitor { background: radial-gradient(circle at 38% 32%, #FFD54F, #F57F17); }
+    .pin-hidden { background: #bbb; }
+
+    .sticky-exhibitor-tag {
+      position: absolute; top: 5px; right: 7px;
+      font-size: 9px; background: #F57F17; color: #fff;
+      border-radius: 4px; padding: 1px 5px; letter-spacing: 0.5px;
+    }
+    .hidden-label { font-size: 11px; color: #999; font-style: italic; margin-bottom: 4px; }
+
+    .sticky-text {
+      font-size: 13px; line-height: 1.65; color: #2c2416;
+      word-break: break-word; margin-bottom: 8px;
+    }
+
+    .sticky-footer {
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .sticky-meta { font-size: 9px; color: #999; }
+    .report-btn {
+      font-size: 10px; background: none; border: none;
+      cursor: pointer; color: #bbb; padding: 2px 4px;
+    }
+
+    /* ── FABボタン ── */
+    #fab {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      z-index: 50;
+    }
+    #fab button {
+      background: var(--accent);
+      color: #fff; border: none; border-radius: 28px;
+      padding: 14px 28px; font-size: 15px; font-weight: 700;
+      cursor: pointer; font-family: inherit;
+      box-shadow: 0 4px 20px rgba(139,111,71,0.5);
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    /* ── モーダル共通 ── */
+    .overlay {
+      position: fixed; inset: 0;
+      background: var(--modal-bg);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100; padding: 16px;
+    }
+    .overlay.hidden { display: none; }
+
+    .modal {
+      background: #fff; border-radius: 16px;
+      width: 100%; max-width: 340px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.28);
+      overflow: hidden;
+    }
+
+    .modal-body {
+      padding: 28px 24px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+
+    .modal-icon { font-size: 34px; text-align: center; }
+    .modal-title { font-size: 17px; font-weight: 700; text-align: center; color: var(--text); }
+    .modal-sub { font-size: 13px; color: var(--text-mid); text-align: center; line-height: 1.6; }
+    .modal-hint { font-size: 11px; color: var(--text-light); text-align: center; }
+
+    .field {
+      background: #faf8f4; border: 1px solid #e0d5c3;
+      border-radius: 8px; color: var(--text); font-size: 14px;
+      padding: 10px 14px; outline: none; font-family: inherit;
+      width: 100%;
+    }
+    .field.error { border-color: #c0392b; }
+    .err-msg { font-size: 12px; color: #c0392b; }
+
+    .btn-row { display: flex; gap: 8px; }
+    .btn {
+      flex: 1; border-radius: 10px; padding: 11px;
+      font-size: 14px; font-weight: 700; cursor: pointer;
+      font-family: inherit; border: none;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:disabled { opacity: 0.45; cursor: default; }
+    .btn-ghost { background: transparent; border: 1px solid #ddd; color: #888; }
+    .btn-danger { background: #c0392b; color: #fff; }
+
+    /* ── 付箋書くモーダル ── */
+    #write-note-area {
+      background: #FFF176;
+      border-bottom: 2px solid #F0C030;
+      padding: 28px 20px 16px;
+      position: relative;
+    }
+    #write-note-area .pin {
+      width: 15px; height: 15px; border-radius: 50%;
+      background: radial-gradient(circle at 38% 32%, #ff6b6b, #c0392b);
+      box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+      position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    }
+    #write-sender-label { font-size: 11px; color: #888; margin-bottom: 8px; margin-top: 4px; }
+    #write-textarea {
+      width: 100%; min-height: 120px;
+      background: transparent; border: none; outline: none;
+      resize: none; font-size: 15px; line-height: 1.7;
+      color: #333; font-family: 'Noto Serif JP', serif;
+    }
+    #write-count { font-size: 11px; color: #aaa; text-align: right; margin-top: 4px; }
+    #write-actions { padding: 14px 20px; background: #faf8f4; display: flex; gap: 8px; }
+
+    /* ── 通報モーダル ── */
+    .reason-btn {
+      width: 100%; padding: 10px 14px; border-radius: 8px;
+      border: 1px solid #ddd; background: #faf8f4;
+      color: #444; font-size: 12px; cursor: pointer;
+      text-align: left; font-family: inherit;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .reason-btn.selected { border-color: var(--accent); background: #FFF8E1; color: var(--accent); }
+
+    .report-info {
+      background: #faf8f4; border-radius: 8px;
+      padding: 12px; font-size: 12px; color: #555; line-height: 1.8;
+    }
+
+    .toggle-label {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; color: #555; cursor: pointer;
+    }
+
+    /* ── ローディング ── */
+    #loading {
+      position: fixed; inset: 0; background: #b07030;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200; flex-direction: column; gap: 12px;
+    }
+    #loading p { color: rgba(255,255,255,0.8); font-size: 14px; font-family: 'Noto Serif JP', serif; }
+    .spinner {
+      width: 36px; height: 36px; border: 3px solid rgba(255,255,255,0.3);
+      border-top-color: #fff; border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- ローディング -->
+<div id="loading">
+  <div class="spinner"></div>
+  <p>読み込み中…</p>
+</div>
+
+<!-- コルクボード -->
+<div id="board">
+  <div id="board-inner">
+    <!-- プロフィール付箋 -->
+    <div class="profile-note" id="profile-note">
+      <div class="pin"></div>
+      <h2 id="space-title">—</h2>
+      <p class="artist" id="space-artist"></p>
+      <p class="period" id="space-period"></p>
+      <div class="sns-links" id="sns-links"></div>
+      <button class="exhibitor-login-btn" id="exhibitor-login-btn" onclick="openExhibitorLogin()">🔑 出展者ログイン</button>
+      <span class="exhibitor-badge hidden" id="exhibitor-badge">✓ 出展者モード</span>
+    </div>
+
+    <div class="divider">
+      <div class="divider-line"></div>
+      <span class="divider-label">MESSAGES</span>
+      <div class="divider-line"></div>
+    </div>
+
+    <div id="notes-grid">
+      <div class="empty-msg">まだメッセージはありません<br />最初の付箋を貼ってみましょう 📌</div>
+    </div>
+  </div>
+</div>
+
+<!-- FAB -->
+<div id="fab">
+  <button onclick="openWrite()">✏️ 付箋を書く</button>
+</div>
+
+<!-- ニックネームモーダル -->
+<div class="overlay" id="modal-nickname">
+  <div class="modal">
+    <div class="modal-body">
+      <div class="modal-icon">📌</div>
+      <div class="modal-title">ギャラリーへようこそ</div>
+      <div class="modal-sub" id="welcome-space-name"></div>
+      <div class="modal-hint">ニックネームを入力してください<br><span style="font-size:11px">空白のままでも参加できます</span></div>
+      <input class="field" id="nickname-input" placeholder="あなたの名前（任意）" maxlength="20" />
+      <button class="btn btn-primary" onclick="submitNickname()">入室する</button>
+    </div>
+  </div>
+</div>
+
+<!-- 付箋を書くモーダル -->
+<div class="overlay hidden" id="modal-write">
+  <div class="modal">
+    <div id="write-note-area">
+      <div class="pin"></div>
+      <div id="write-sender-label"></div>
+      <textarea id="write-textarea" placeholder="メッセージを書いてください…" maxlength="200"
+        oninput="updateCount()"></textarea>
+      <div id="write-count">0 / 200</div>
+    </div>
+    <div id="write-actions">
+      <button class="btn btn-ghost" onclick="closeWrite()">キャンセル</button>
+      <button class="btn btn-primary" id="post-btn" onclick="submitPost()" disabled>📌 貼る</button>
+    </div>
+  </div>
+</div>
+
+<!-- 出展者ログインモーダル -->
+<div class="overlay hidden" id="modal-exhibitor-login">
+  <div class="modal">
+    <div class="modal-body">
+      <div class="modal-icon">🔑</div>
+      <div class="modal-title">出展者ログイン</div>
+      <input class="field" id="exhibitor-pw-input" type="password" placeholder="パスワード" />
+      <p class="err-msg hidden" id="exhibitor-pw-err">パスワードが違います</p>
+      <div class="btn-row">
+        <button class="btn btn-ghost" onclick="closeExhibitorLogin()">キャンセル</button>
+        <button class="btn btn-primary" onclick="submitExhibitorLogin()">ログイン</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 通報モーダル Step1 -->
+<div class="overlay hidden" id="modal-report-1">
+  <div class="modal">
+    <div class="modal-body">
+      <div class="modal-icon">⚑</div>
+      <div class="modal-title">この付箋への対応</div>
+      <div class="modal-sub" id="report-preview"></div>
+      <button class="reason-btn selected" id="mode-hide" onclick="selectMode('hide')">🚫 非公開にする（来場者から隠す）</button>
+      <button class="reason-btn" id="mode-notify" onclick="selectMode('notifyOnly')">📢 管理者に通知だけ送る</button>
+      <div class="btn-row">
+        <button class="btn btn-ghost" onclick="closeReport()">キャンセル</button>
+        <button class="btn btn-primary" onclick="reportStep(2)">次へ</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 通報モーダル Step2 -->
+<div class="overlay hidden" id="modal-report-2">
+  <div class="modal">
+    <div class="modal-body">
+      <div class="modal-icon">📝</div>
+      <div class="modal-title">理由（任意）</div>
+      <button class="reason-btn" data-reason="攻撃的・不快な内容" onclick="selectReason(this)">攻撃的・不快な内容</button>
+      <button class="reason-btn" data-reason="個人情報・プライバシー" onclick="selectReason(this)">個人情報・プライバシー</button>
+      <button class="reason-btn" data-reason="スパム・宣伝" onclick="selectReason(this)">スパム・宣伝</button>
+      <textarea class="field" id="report-note" placeholder="その他・補足（自由入力）" style="min-height:60px;resize:vertical;font-size:12px"></textarea>
+      <div class="btn-row">
+        <button class="btn btn-ghost" onclick="reportStep(1)">戻る</button>
+        <button class="btn btn-primary" onclick="reportStep(3)">次へ</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 通報モーダル Step3 -->
+<div class="overlay hidden" id="modal-report-3">
+  <div class="modal">
+    <div class="modal-body">
+      <div class="modal-icon">✅</div>
+      <div class="modal-title">確認</div>
+      <div class="report-info" id="report-confirm-text"></div>
+      <label class="toggle-label" id="notify-admin-wrap">
+        <input type="checkbox" id="notify-admin-check" checked />
+        管理者にも通知する
+      </label>
+      <div class="btn-row">
+        <button class="btn btn-ghost" onclick="reportStep(2)">戻る</button>
+        <button class="btn btn-danger" onclick="submitReport()">実行する</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+// ═══════════════════════════════════════════════
+//  Firebase 設定
+// ═══════════════════════════════════════════════
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+import { getFirestore, collection, doc, getDoc, addDoc, onSnapshot, updateDoc, serverTimestamp, query, orderBy }
+  from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAFdBPTqPUwHALpFYxy1L-XgxaFcHJpKrI",
+  authDomain: "dfg-message-board.firebaseapp.com",
+  projectId: "dfg-message-board",
+  storageBucket: "dfg-message-board.firebasestorage.app",
+  messagingSenderId: "257856032842",
+  appId: "1:257856032842:web:07ff7a53077326845f96b3"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+
+// ═══════════════════════════════════════════════
+//  スペース設定（QRごとに変える部分）
+// ═══════════════════════════════════════════════
+const SPACE_ID = "space-1"; // ← QRコードごとに変更する
+
+// ═══════════════════════════════════════════════
+//  状態管理
+// ═══════════════════════════════════════════════
+let myNick       = "";
+let isExhibitor  = false;
+let spaceData    = null;
+let reportTarget = null;
+let reportMode   = "hide";
+let reportReason = "";
+
+// ═══════════════════════════════════════════════
+//  カラーパレット（ニックネームのハッシュで決定）
+// ═══════════════════════════════════════════════
+const VISITOR_COLORS = [
+  { bg:"#FFF9C4", border:"#F0C030" },
+  { bg:"#FFCCBC", border:"#FFAB91" },
+  { bg:"#C8E6C9", border:"#A5D6A7" },
+  { bg:"#BBDEFB", border:"#90CAF9" },
+  { bg:"#E1BEE7", border:"#CE93D8" },
+  { bg:"#B2EBF2", border:"#80DEEA" },
+  { bg:"#FFE0B2", border:"#FFCC80" },
+  { bg:"#F8BBD0", border:"#F48FB1" },
+];
+const EXHIBITOR_COLOR = { bg:"#FFFDE7", border:"#FFD54F" };
+
+function hashColor(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) & 0xffffffff;
+  return VISITOR_COLORS[Math.abs(h) % VISITOR_COLORS.length];
+}
+
+function tiltDeg(id) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 17 + id.charCodeAt(i)) & 0xffffffff;
+  return ((Math.abs(h) % 7) - 3) * 0.85;
+}
+
+function nowStr() {
+  return new Date().toLocaleString("ja-JP", { month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" });
+}
+
+const SNS_ICONS = { instagram:"📷", x:"✖", twitter:"✖", facebook:"📘", website:"🔗" };
+
+// ═══════════════════════════════════════════════
+//  初期化
+// ═══════════════════════════════════════════════
+async function init() {
+  // スペース情報を取得
+  const spaceRef = doc(db, "spaces", SPACE_ID);
+  const spaceSnap = await getDoc(spaceRef);
+
+  if (!spaceSnap.exists()) {
+    // Firestoreにスペースがなければデモデータを使う
+    spaceData = {
+      name: "記憶の断片",
+      artist: "山田 花子",
+      period: "2026年4月19日 〜 5月3日",
+      sns: [
+        { type:"instagram", url:"https://instagram.com/demo", label:"@demo_art" },
+      ],
+      exhibitorPassword: "passA",
+    };
+  } else {
+    spaceData = spaceSnap.data();
+  }
+
+  // プロフィール付箋に反映
+  document.getElementById("space-title").textContent  = spaceData.name;
+  document.getElementById("space-artist").textContent = spaceData.artist || "";
+  document.getElementById("space-period").textContent = spaceData.period || "";
+  document.getElementById("welcome-space-name").textContent = spaceData.name;
+
+  // SNSリンク
+  const snsWrap = document.getElementById("sns-links");
+  (spaceData.sns || []).forEach(s => {
+    const a = document.createElement("a");
+    a.className = "sns-link";
+    a.href = s.url; a.target = "_blank"; a.rel = "noopener noreferrer";
+    a.innerHTML = `<span>${SNS_ICONS[s.type] || "🔗"}</span><span>${s.label}</span>`;
+    snsWrap.appendChild(a);
+  });
+
+  document.getElementById("loading").style.display = "none";
+
+  // ニックネームモーダルを開く
+  document.getElementById("nickname-input").focus();
+
+  // メッセージのリアルタイム購読
+  const msgsRef = query(
+    collection(db, "spaces", SPACE_ID, "messages"),
+    orderBy("createdAt", "asc")
+  );
+  onSnapshot(msgsRef, snap => {
+    renderNotes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  });
+}
+
+// ═══════════════════════════════════════════════
+//  付箋の描画
+// ═══════════════════════════════════════════════
+function renderNotes(messages) {
+  const grid = document.getElementById("notes-grid");
+  grid.innerHTML = "";
+
+  const visible = messages.filter(m => !m.hidden || isExhibitor);
+
+  if (visible.length === 0) {
+    grid.innerHTML = `<div class="empty-msg">まだメッセージはありません<br />最初の付箋を貼ってみましょう 📌</div>`;
+    return;
+  }
+
+  visible.forEach(msg => {
+    const isHidden   = !!msg.hidden;
+    const isExhibMsg = !!msg.isExhibitor;
+    const color      = isExhibMsg ? EXHIBITOR_COLOR : hashColor(msg.sender || "匿名");
+    const tilt       = tiltDeg(msg.id);
+
+    const el = document.createElement("div");
+    el.className = "sticky" + (isHidden ? " hidden-note" : "");
+    el.style.background  = isHidden ? "#ddd" : color.bg;
+    el.style.border      = `1px solid ${isHidden ? "#bbb" : color.border}`;
+    el.style.transform   = `rotate(${tilt}deg)`;
+
+    const pinClass = isHidden ? "pin pin-hidden" : isExhibMsg ? "pin pin-exhibitor" : "pin pin-visitor";
+
+    el.innerHTML = `
+      <div class="${pinClass}"></div>
+      ${isExhibMsg && !isHidden ? `<div class="sticky-exhibitor-tag">出展者</div>` : ""}
+      ${isHidden ? `<div class="hidden-label">${msg.hiddenBy === "admin" ? "管理者によって非公開" : "非公開"}</div>` : ""}
+      ${!isHidden ? `<p class="sticky-text">${escHtml(msg.text)}</p>` : ""}
+      <div class="sticky-footer">
+        <span class="sticky-meta">${escHtml(msg.sender || "匿名")} · ${msg.timeStr || ""}</span>
+        ${!isHidden && isExhibitor ? `<button class="report-btn" data-id="${msg.id}" onclick="openReport('${msg.id}')">⚑</button>` : ""}
+      </div>
+    `;
+    grid.appendChild(el);
+  });
+
+  // メッセージ全体を保持（通報用）
+  window._messages = messages;
+}
+
+function escHtml(str) {
+  return (str || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");
+}
+
+// ═══════════════════════════════════════════════
+//  ニックネーム
+// ═══════════════════════════════════════════════
+window.submitNickname = function() {
+  const val = document.getElementById("nickname-input").value.trim();
+  myNick = val || "匿名";
+  document.getElementById("modal-nickname").classList.add("hidden");
+};
+
+document.getElementById("nickname-input").addEventListener("keydown", e => {
+  if (e.key === "Enter") window.submitNickname();
+});
+
+// ═══════════════════════════════════════════════
+//  付箋を書く
+// ═══════════════════════════════════════════════
+window.openWrite = function() {
+  const color = isExhibitor ? EXHIBITOR_COLOR : hashColor(myNick);
+  document.getElementById("write-note-area").style.background    = color.bg;
+  document.getElementById("write-note-area").style.borderBottomColor = color.border;
+  document.getElementById("write-sender-label").textContent = isExhibitor ? "🏷 出展者" : myNick;
+  document.getElementById("write-textarea").value = "";
+  document.getElementById("write-count").textContent = "0 / 200";
+  document.getElementById("post-btn").disabled = true;
+  document.getElementById("modal-write").classList.remove("hidden");
+  setTimeout(() => document.getElementById("write-textarea").focus(), 50);
+};
+
+window.closeWrite = function() {
+  document.getElementById("modal-write").classList.add("hidden");
+};
+
+window.updateCount = function() {
+  const len = document.getElementById("write-textarea").value.length;
+  document.getElementById("write-count").textContent = `${len} / 200`;
+  document.getElementById("post-btn").disabled = len === 0;
+};
+
+window.submitPost = async function() {
+  const text = document.getElementById("write-textarea").value.trim();
+  if (!text) return;
+  document.getElementById("post-btn").disabled = true;
+
+  await addDoc(collection(db, "spaces", SPACE_ID, "messages"), {
+    sender: myNick,
+    text,
+    isExhibitor,
+    hidden: false,
+    timeStr: nowStr(),
+    createdAt: serverTimestamp(),
+  });
+
+  closeWrite();
+  // 最下部へスクロール
+  setTimeout(() => {
+    const board = document.getElementById("board");
+    board.scrollTo({ top: board.scrollHeight, behavior: "smooth" });
+  }, 300);
+};
+
+// ═══════════════════════════════════════════════
+//  出展者ログイン
+// ═══════════════════════════════════════════════
+window.openExhibitorLogin = function() {
+  document.getElementById("exhibitor-pw-input").value = "";
+  document.getElementById("exhibitor-pw-err").classList.add("hidden");
+  document.getElementById("modal-exhibitor-login").classList.remove("hidden");
+  setTimeout(() => document.getElementById("exhibitor-pw-input").focus(), 50);
+};
+
+window.closeExhibitorLogin = function() {
+  document.getElementById("modal-exhibitor-login").classList.add("hidden");
+};
+
+window.submitExhibitorLogin = function() {
+  const pw = document.getElementById("exhibitor-pw-input").value;
+  if (pw === (spaceData?.exhibitorPassword || "passA")) {
+    isExhibitor = true;
+    document.getElementById("exhibitor-login-btn").classList.add("hidden");
+    document.getElementById("exhibitor-badge").classList.remove("hidden");
+    closeExhibitorLogin();
+    // 付箋を再描画（非公開付箋を表示するため）
+    if (window._messages) renderNotes(window._messages);
+  } else {
+    document.getElementById("exhibitor-pw-err").classList.remove("hidden");
+    document.getElementById("exhibitor-pw-input").value = "";
+  }
+};
+
+document.getElementById("exhibitor-pw-input").addEventListener("keydown", e => {
+  if (e.key === "Enter") window.submitExhibitorLogin();
+});
+
+// ═══════════════════════════════════════════════
+//  通報・非公開
+// ═══════════════════════════════════════════════
+window.openReport = function(msgId) {
+  reportTarget = (window._messages || []).find(m => m.id === msgId);
+  if (!reportTarget) return;
+  reportMode   = "hide";
+  reportReason = "";
+
+  document.getElementById("report-preview").textContent =
+    `「${reportTarget.text.slice(0, 28)}${reportTarget.text.length > 28 ? "…" : ""}」`;
+  document.getElementById("mode-hide").classList.add("selected");
+  document.getElementById("mode-notify").classList.remove("selected");
+  document.querySelectorAll(".reason-btn[data-reason]").forEach(b => b.classList.remove("selected"));
+  document.getElementById("report-note").value = "";
+
+  reportStep(1);
+};
+
+window.closeReport = function() {
+  [1,2,3].forEach(n => document.getElementById(`modal-report-${n}`).classList.add("hidden"));
+};
+
+window.reportStep = function(n) {
+  [1,2,3].forEach(i => document.getElementById(`modal-report-${i}`).classList.add("hidden"));
+  if (n === 3) {
+    const modeLabel = reportMode === "hide" ? "非公開にする" : "通知のみ";
+    document.getElementById("report-confirm-text").innerHTML =
+      `操作: <strong>${modeLabel}</strong>${reportReason ? `<br>理由: <strong>${reportReason}</strong>` : ""}`;
+    document.getElementById("notify-admin-wrap").style.display = reportMode === "hide" ? "flex" : "none";
+  }
+  document.getElementById(`modal-report-${n}`).classList.remove("hidden");
+};
+
+window.selectMode = function(mode) {
+  reportMode = mode;
+  document.getElementById("mode-hide").classList.toggle("selected",   mode === "hide");
+  document.getElementById("mode-notify").classList.toggle("selected", mode === "notifyOnly");
+};
+
+window.selectReason = function(btn) {
+  document.querySelectorAll(".reason-btn[data-reason]").forEach(b => b.classList.remove("selected"));
+  if (reportReason === btn.dataset.reason) {
+    reportReason = "";
+  } else {
+    reportReason = btn.dataset.reason;
+    btn.classList.add("selected");
+  }
+};
+
+window.submitReport = async function() {
+  if (!reportTarget) return;
+  const notifyAdmin = reportMode === "notifyOnly" || document.getElementById("notify-admin-check").checked;
+  const note = document.getElementById("report-note").value.trim();
+
+  if (reportMode === "hide") {
+    const msgRef = doc(db, "spaces", SPACE_ID, "messages", reportTarget.id);
+    await updateDoc(msgRef, { hidden: true, hiddenBy: "exhibitor" });
+  }
+
+  if (notifyAdmin) {
+    await addDoc(collection(db, "reports"), {
+      spaceId: SPACE_ID,
+      spaceName: spaceData?.name || "",
+      msgId: reportTarget.id,
+      msgText: reportTarget.text,
+      type: reportMode,
+      reason: reportReason,
+      note,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+  }
+
+  closeReport();
+};
+
+// ═══════════════════════════════════════════════
+//  起動
+// ═══════════════════════════════════════════════
+init().catch(err => {
+  console.error(err);
+  document.getElementById("loading").innerHTML = `<p style="color:#fff">読み込みに失敗しました。<br>ページを再読み込みしてください。</p>`;
+});
+</script>
+</body>
+</html>
