@@ -543,13 +543,17 @@ async function loadAll() {
   checkQueue();
 }
 
-// ── スペース読み込み ──────────────────────────────────────
-async function loadSpaces() {
-  const snap = await getDocs(collection(db, 'spaces'));
-  spaces = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  spaces.sort((a, b) => (a.id > b.id ? 1 : -1));
-  renderSpaces();
-  updateSelects();
+// ── スペース読み込み（リアルタイム購読）────────────────────
+function loadSpaces() {
+  return new Promise(resolve => {
+    onSnapshot(collection(db, 'spaces'), snap => {
+      spaces = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      spaces.sort((a, b) => (a.id > b.id ? 1 : -1));
+      renderSpaces();
+      updateSelects();
+      resolve();
+    });
+  });
 }
 
 function renderSpaces() {
