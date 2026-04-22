@@ -436,9 +436,10 @@ const app = initializeApp(firebaseConfig);
 const db  = getFirestore(app);
 
 // ═══════════════════════════════════════════════
-//  スペース設定（QRごとに変える部分）
+//  スペース設定（URLパラメータから自動取得）
+//  例: ?space=space-1 → SPACE_ID = "space-1"
 // ═══════════════════════════════════════════════
-const SPACE_ID = "space-1"; // ← QRコードごとに変更する
+const SPACE_ID = new URLSearchParams(location.search).get("space") || "space-1";
 
 // ═══════════════════════════════════════════════
 //  状態管理
