@@ -347,11 +347,11 @@
       <div class="card-title">ブックマークキューから取込</div>
       <div class="queue-status">
         <span id="queue-count-label" class="queue-empty">キューを確認中…</span>
-        <button class="btn btn-sm btn-ghost" onclick="checkQueue()">🔄 更新</button>
+        <button class="btn btn-sm btn-ghost" onclick="checkQueue()">🔄 キューを確認する</button>
       </div>
       <div id="queue-preview-area"></div>
       <div class="btn-row">
-        <button class="btn btn-success" id="import-btn" onclick="importQueue()" disabled>📥 キューを取り込む</button>
+        <button class="btn btn-success" id="import-btn" onclick="importQueue()" disabled>🎯 QRコードを作成する</button>
         <button class="btn btn-ghost btn-sm" onclick="clearQueue()">キューをクリア</button>
       </div>
     </div>
@@ -572,21 +572,39 @@ function renderSpaces() {
         <span style="color:var(--text-light);font-size:18px">›</span>
       </div>
       <div class="space-card-body" id="sp-body-${idx}">
+
+        <!-- プレビュー -->
+        <div id="sp-preview-${idx}" style="background:#faf6ef;border:1px solid #e0d5c3;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-family:'Noto Serif JP',serif;">
+          <div style="font-size:11px;color:#a08c6e;margin-bottom:6px;letter-spacing:1px;">📌 プロフィール付箋のプレビュー</div>
+          <div id="sp-preview-booth-${idx}" style="font-size:11px;color:#a08c6e;margin-bottom:2px;display:${sp.boothNumber ? 'block' : 'none'}">${escHtml(sp.boothNumber || '')}</div>
+          <div id="sp-preview-name-${idx}" style="font-size:16px;font-weight:700;color:#2c2416;margin-bottom:3px">${escHtml(sp.name || '（タイトルなし）')}</div>
+          <div id="sp-preview-artist-${idx}" style="font-size:12px;color:#6b5a42;margin-bottom:2px">${escHtml(sp.artist || '')}</div>
+          <div id="sp-preview-period-${idx}" style="font-size:11px;color:#a08c6e">${escHtml(sp.period || '')}</div>
+        </div>
+
         <div class="field-row">
           <label class="field-label">スペースID（変更不可）</label>
           <input class="field" value="${escHtml(sp.id)}" disabled style="opacity:0.5" />
         </div>
         <div class="field-row">
+          <label class="field-label">ブース番号（任意）</label>
+          <input class="field" id="sp-booth-${idx}" value="${escHtml(sp.boothNumber || '')}" placeholder="例: 1-A （空欄の場合は非表示）"
+            oninput="updatePreview(${idx})" />
+        </div>
+        <div class="field-row">
           <label class="field-label">展示タイトル</label>
-          <input class="field" id="sp-name-${idx}" value="${escHtml(sp.name || '')}" />
+          <input class="field" id="sp-name-${idx}" value="${escHtml(sp.name || '')}"
+            oninput="updatePreview(${idx})" />
         </div>
         <div class="field-row">
           <label class="field-label">アーティスト名</label>
-          <input class="field" id="sp-artist-${idx}" value="${escHtml(sp.artist || '')}" />
+          <input class="field" id="sp-artist-${idx}" value="${escHtml(sp.artist || '')}"
+            oninput="updatePreview(${idx})" />
         </div>
         <div class="field-row">
           <label class="field-label">会期</label>
-          <input class="field" id="sp-period-${idx}" value="${escHtml(sp.period || '')}" />
+          <input class="field" id="sp-period-${idx}" value="${escHtml(sp.period || '')}"
+            oninput="updatePreview(${idx})" />
         </div>
         <div class="field-row">
           <label class="field-label">出展者パスワード</label>
@@ -623,6 +641,21 @@ function renderSpaces() {
   `).join('');
 }
 
+window.updatePreview = function(idx) {
+  const name   = document.getElementById('sp-name-'   + idx)?.value || '';
+  const artist = document.getElementById('sp-artist-' + idx)?.value || '';
+  const period = document.getElementById('sp-period-' + idx)?.value || '';
+  const booth  = document.getElementById('sp-booth-'  + idx)?.value || '';
+  const boothEl = document.getElementById('sp-preview-booth-' + idx);
+  if (boothEl) { boothEl.textContent = booth; boothEl.style.display = booth ? 'block' : 'none'; }
+  const nameEl = document.getElementById('sp-preview-name-' + idx);
+  if (nameEl) nameEl.textContent = name || '（タイトルなし）';
+  const artistEl = document.getElementById('sp-preview-artist-' + idx);
+  if (artistEl) artistEl.textContent = artist;
+  const periodEl = document.getElementById('sp-preview-period-' + idx);
+  if (periodEl) periodEl.textContent = period;
+};
+
 window.toggleSpaceCard = function(idx) {
   const body = document.getElementById('sp-body-' + idx);
   body.classList.toggle('open');
@@ -656,6 +689,7 @@ window.saveSpace = async function(idx) {
       name: document.getElementById('sp-name-' + idx).value.trim(),
       artist: document.getElementById('sp-artist-' + idx).value.trim(),
       period: document.getElementById('sp-period-' + idx).value.trim(),
+      boothNumber: document.getElementById('sp-booth-' + idx).value.trim(),
       exhibitorPassword: document.getElementById('sp-pw-' + idx).value.trim(),
       sns: sp.sns || [],
       active: document.getElementById('sp-active-' + idx).checked,
@@ -746,7 +780,7 @@ window.importQueue = async function() {
     let count = 0;
     for (const item of queueDocs) {
       const d = parseText(item.raw || '');
-      const spaceId = d.space ? 'space-' + d.space.replace(/\s+/g, '-').toLowerCase() : genSpaceId();
+      const spaceId = 'space-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
       const snsArr = d.sns ? [{ type: detectSnsType(d.sns), url: d.sns, label: d.sns.replace(/^https?:\/\//, '').replace(/\/$/, '') }] : [];
 
       await setDoc(doc(db, 'spaces', spaceId), {
