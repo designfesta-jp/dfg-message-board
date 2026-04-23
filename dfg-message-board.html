@@ -358,8 +358,13 @@
       <p class="artist" id="space-artist"></p>
       <p class="period" id="space-period"></p>
       <div class="sns-links" id="sns-links"></div>
-      <button class="exhibitor-login-btn" id="exhibitor-login-btn" onclick="openExhibitorLogin()">🔑 出展者ログイン</button>
-      <span class="exhibitor-badge hidden" id="exhibitor-badge">✓ 出展者モード</span>
+      <div id="exhibitor-status-area">
+        <button class="exhibitor-login-btn" id="exhibitor-login-btn" onclick="openExhibitorLogin()">🔑 出展者ログイン</button>
+        <div class="hidden" id="exhibitor-logged-in" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span class="exhibitor-badge">✓ 出展者としてログイン中</span>
+          <button class="exhibitor-login-btn" onclick="exhibitorLogout()" style="color:#c0392b;border-color:#e8b4ae;">ログアウト</button>
+        </div>
+      </div>
     </div>
 
     <div class="divider">
@@ -376,7 +381,7 @@
 
 <!-- FAB -->
 <div id="fab">
-  <button onclick="openWrite()">✏️ 付箋を書く</button>
+  <button onclick="openWrite()">✏️ メッセージを書く</button>
 </div>
 
 <!-- ニックネームモーダル -->
@@ -386,7 +391,7 @@
       <div class="modal-icon">📌</div>
       <div class="modal-title">ギャラリーへようこそ</div>
       <div class="modal-sub" id="welcome-space-name"></div>
-      <div class="modal-hint">ニックネームを入力してください<br><span style="font-size:11px">空白のままでも参加できます</span></div>
+      <div class="modal-hint">ニックネームを入力してください<br><span style="font-size:11px">空白のまま入室すると「来場者」として参加できます</span></div>
       <input class="field" id="nickname-input" placeholder="あなたの名前（任意）" maxlength="20" />
       <button class="btn btn-primary" onclick="submitNickname()">入室する</button>
     </div>
@@ -405,7 +410,7 @@
     </div>
     <div id="write-actions">
       <button class="btn btn-ghost" onclick="closeWrite()">キャンセル</button>
-      <button class="btn btn-primary" id="post-btn" onclick="submitPost()" disabled>📌 貼る</button>
+      <button class="btn btn-primary" id="post-btn" onclick="submitPost()" disabled>📌 送る</button>
     </div>
   </div>
 </div>
@@ -634,7 +639,7 @@ function renderNotes(messages) {
   visible.forEach(msg => {
     const isHidden   = !!msg.hidden;
     const isExhibMsg = !!msg.isExhibitor;
-    const color      = isExhibMsg ? EXHIBITOR_COLOR : hashColor(msg.sender || "匿名");
+    const color      = isExhibMsg ? EXHIBITOR_COLOR : hashColor(msg.sender || "来場者");
     const tilt       = tiltDeg(msg.id);
 
     const el = document.createElement("div");
@@ -669,7 +674,7 @@ function renderNotes(messages) {
       ${isHidden ? `<div class="hidden-label">${msg.hiddenBy === "admin" ? "管理者によって非公開" : "非公開"}</div>` : ""}
       ${!isHidden ? `<p class="sticky-text">${escHtml(msg.text)}</p>` : ""}
       <div class="sticky-footer">
-        <span class="sticky-meta">${escHtml(msg.sender || "匿名")} · ${msg.timeStr || ""}</span>
+        <span class="sticky-meta">${escHtml(msg.sender || "来場者")} · ${msg.timeStr || ""}</span>
         ${!isHidden && isExhibitor ? `<button class="report-btn" data-id="${msg.id}" onclick="openReport('${msg.id}')">⚑</button>` : ""}
       </div>
     `;
@@ -689,7 +694,7 @@ function escHtml(str) {
 // ═══════════════════════════════════════════════
 window.submitNickname = function() {
   const val = document.getElementById("nickname-input").value.trim();
-  myNick = val || "匿名";
+  myNick = val || "来場者";
   document.getElementById("modal-nickname").classList.add("hidden");
 };
 
@@ -763,8 +768,8 @@ window.submitExhibitorLogin = function() {
   const pw = document.getElementById("exhibitor-pw-input").value;
   if (pw === (spaceData?.exhibitorPassword || "passA")) {
     isExhibitor = true;
-    document.getElementById("exhibitor-login-btn").classList.add("hidden");
-    document.getElementById("exhibitor-badge").classList.remove("hidden");
+    document.getElementById('exhibitor-login-btn').style.display = 'none';
+    document.getElementById('exhibitor-logged-in').style.display = 'flex';
     closeExhibitorLogin();
     // 付箋を再描画（非公開付箋を表示するため）
     if (window._messages) renderNotes(window._messages);
