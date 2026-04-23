@@ -1135,34 +1135,38 @@ window.renderQRList = function() {
 
   const activeSpaces = spaces.filter(sp => sp.active !== false);
 
-  // ── 画面プレビュー＋印刷用を同じDOMで生成（QRは1セットのみ）──
+  // ── 画面プレビュー（軽量カード表示）──
   const previewWrap = document.createElement('div');
-  previewWrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;';
+  previewWrap.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-top:8px;';
 
   activeSpaces.forEach((sp, i) => {
     const url = `${baseUrl}?space=${sp.id}`;
-    const suffix = 'qr-' + sp.id;
-
-    // 画面プレビュー（縮小表示）
-    const halfHtml = makeHalf(sp, url, i * 13, suffix);
-    const wrapper = document.createElement('div');
-    wrapper.style.cssText = 'transform-origin:top left;transform:scale(0.45);width:148.5mm;height:210mm;flex-shrink:0;margin-bottom:-116mm;margin-right:-82mm;';
-    wrapper.innerHTML = halfHtml;
-    previewWrap.appendChild(wrapper);
+    const spName = sp.spaceNumber || sp.id;
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#c8924a;border-radius:6px;padding:12px;text-align:center;box-shadow:2px 4px 10px rgba(0,0,0,0.2);';
+    card.innerHTML = `
+      <div style="font-size:10px;font-weight:700;color:#fff;margin-bottom:4px;opacity:0.85">${escHtml(spName)}</div>
+      <div style="font-size:11px;font-weight:700;color:#fff;margin-bottom:8px;line-height:1.4">${escHtml(sp.name || '（タイトルなし）')}</div>
+      <div style="background:#FFFDE7;border:1px solid #FFD54F;border-radius:3px;padding:6px;margin-bottom:6px;display:inline-block;">
+        <div id="qr-prev-${sp.id}"></div>
+      </div>
+      <div style="font-size:9px;color:rgba(255,255,255,0.8)">${escHtml(sp.artist || '')}</div>
+    `;
+    previewWrap.appendChild(card);
   });
 
   area.appendChild(previewWrap);
 
-  // ── QR生成（画面プレビュー用のみ）──
+  // ── QR生成（小さめ・軽量）──
   setTimeout(() => {
-    activeSpaces.forEach((sp, i) => {
+    activeSpaces.forEach(sp => {
       const url = `${baseUrl}?space=${sp.id}`;
-      const el = document.getElementById('qr-print-qr-' + sp.id);
+      const el = document.getElementById('qr-prev-' + sp.id);
       if (el && el.children.length === 0) {
-        new QRCode(el, { text: url, width: 140, height: 140, colorDark: '#2c2416', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+        new QRCode(el, { text: url, width: 80, height: 80, colorDark: '#2c2416', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.L });
       }
     });
-  }, 200);
+  }, 100);
 };
 
 // ── 印刷ボタン：押したときだけ印刷用シートを生成してprint() ──
