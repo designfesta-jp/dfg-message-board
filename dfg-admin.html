@@ -1214,14 +1214,10 @@ window.preparePrint = async function() {
   });
 
   // QRの描画完了を待ってから印刷（2秒待機）
+  // ※印刷用DOMは削除しない（削除するとプリンターにデータが届かないため）
   setTimeout(() => {
-    const cleanup = () => {
-      printArea.innerHTML = '';
-      btn.textContent = '🖨 印刷';
-      btn.disabled = false;
-      window.removeEventListener('afterprint', cleanup);
-    };
-    window.addEventListener('afterprint', cleanup);
+    btn.textContent = '🖨 印刷';
+    btn.disabled = false;
     window.print();
   }, 2000);
 };
