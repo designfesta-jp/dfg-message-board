@@ -412,7 +412,7 @@
       </div>
       <div class="btn-row">
         <button class="btn btn-primary btn-sm" onclick="renderQRList()">🔄 QRコードを更新</button>
-        <button class="btn btn-ghost btn-sm" id="print-btn" onclick="window.print()">🖨 印刷</button>
+        <button class="btn btn-ghost btn-sm" id="print-btn" onclick="doPrint()">🖨 印刷</button>
       </div>
     </div>
     <div id="qr-list-area"></div>
@@ -611,6 +611,10 @@ function loadSpaces() {
       renderSpaces();
       updateSelects();
       resolve();
+      // QRタブが開いている場合は印刷中でなければ更新
+      if (document.getElementById('tab-qr').classList.contains('active') && !window._printing) {
+        renderQRList();
+      }
     });
   });
 }
@@ -1193,6 +1197,19 @@ window.renderQRList = function() {
 
 // ── 印刷ボタン：押したときだけ印刷用シートを生成してprint() ──
 
+
+// ── 印刷（印刷中はFirestore更新によるDOM再生成を防止）──────
+window._printing = false;
+window.doPrint = function() {
+  window._printing = true;
+  window.print();
+  // afterprintイベントでフラグを解除
+  const done = () => {
+    window._printing = false;
+    window.removeEventListener('afterprint', done);
+  };
+  window.addEventListener('afterprint', done);
+};
 
 // ── 起動 ──────────────────────────────────────────────────
 init();
