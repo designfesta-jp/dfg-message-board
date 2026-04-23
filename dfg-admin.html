@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gallery Admin</title>
+  <title>DFGメッセージボード管理パネル</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=EB+Garamond:wght@400;600&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -318,7 +318,7 @@
 <div id="login-screen">
   <div class="login-card">
     <div class="login-icon">🔐</div>
-    <div class="login-title">GALLERY ADMIN</div>
+    <div class="login-title">DFG管理パネル</div>
     <div class="login-sub">管理者パスワードを入力してください</div>
     <div class="field-row">
       <input class="field" id="admin-pw" type="password" placeholder="パスワード" />
@@ -331,7 +331,7 @@
 <!-- メイン画面 -->
 <div id="main-screen">
   <div class="top-bar">
-    <div class="top-bar-title">GALLERY ADMIN</div>
+    <div class="top-bar-title">DFGメッセージボード管理パネル</div>
     <button class="logout-btn" onclick="adminLogout()">ログアウト</button>
   </div>
 
@@ -412,7 +412,7 @@
       </div>
       <div class="btn-row">
         <button class="btn btn-primary btn-sm" onclick="renderQRList()">🔄 QRコードを更新</button>
-        <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨 印刷</button>
+        <button class="btn btn-ghost btn-sm" id="print-btn" onclick="preparePrint()">🖨 印刷</button>
       </div>
     </div>
     <div id="qr-list-area"></div>
@@ -446,7 +446,7 @@ const app = initializeApp(firebaseConfig);
 const db  = getFirestore(app);
 
 // ── 管理者パスワード（本番では環境変数等で管理推奨） ──
-const ADMIN_PASSWORD = "admin123";
+const ADMIN_PASSWORD = "dfdf";
 
 // ── 状態 ──────────────────────────────────────────────────
 let spaces  = [];   // [{id, name, artist, period, sns:[], exhibitorPassword, active}]
@@ -1139,57 +1139,86 @@ window.renderQRList = function() {
   const previewWrap = document.createElement('div');
   previewWrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;';
 
-  // 印刷用シートも同時に構築
-  let currentSheet = null;
-  let sheetCount = 0;
-
   activeSpaces.forEach((sp, i) => {
     const url = `${baseUrl}?space=${sp.id}`;
     const suffix = 'qr-' + sp.id;
 
-    // 画面プレビュー（縮小表示・QRあり）
+    // 画面プレビュー（縮小表示）
     const halfHtml = makeHalf(sp, url, i * 13, suffix);
     const wrapper = document.createElement('div');
     wrapper.style.cssText = 'transform-origin:top left;transform:scale(0.45);width:148.5mm;height:210mm;flex-shrink:0;margin-bottom:-116mm;margin-right:-82mm;';
     wrapper.innerHTML = halfHtml;
     previewWrap.appendChild(wrapper);
-
-    // 印刷用シート（2枚ごとに1シート）
-    if (i % 2 === 0) {
-      currentSheet = document.createElement('div');
-      currentSheet.className = 'print-sheet';
-      currentSheet.style.cssText = 'width:297mm;height:210mm;display:flex;flex-direction:row;';
-      currentSheet.innerHTML = makeHalf(sp, url, i * 13, 'prt-' + suffix);
-      printArea.appendChild(currentSheet);
-      sheetCount++;
-    } else if (currentSheet) {
-      currentSheet.innerHTML +=
-        `<div style="width:0.5px;height:210mm;background:#c0a870;flex-shrink:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>` +
-        makeHalf(sp, url, i * 13 + 7, 'prt-' + suffix);
-    }
   });
 
   area.appendChild(previewWrap);
 
-  // ── QR生成（画面プレビュー用のみ、印刷時にも使用）──
+  // ── QR生成（画面プレビュー用のみ）──
   setTimeout(() => {
     activeSpaces.forEach((sp, i) => {
       const url = `${baseUrl}?space=${sp.id}`;
-      // 画面プレビュー用QR
-      const previewEl = wrapper => wrapper.querySelector(`#qr-print-qr-${sp.id}`);
-      const allPrev = previewWrap.querySelectorAll(`#qr-print-qr-${sp.id}`);
-      allPrev.forEach(el => {
-        if (el && el.children.length === 0) {
-          new QRCode(el, { text: url, width: 140, height: 140, colorDark: '#2c2416', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
-        }
-      });
-      // 印刷用QR
-      const prtEl = document.getElementById('qr-print-prt-qr-' + sp.id);
-      if (prtEl && prtEl.children.length === 0) {
-        new QRCode(prtEl, { text: url, width: 140, height: 140, colorDark: '#2c2416', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+      const el = document.getElementById('qr-print-qr-' + sp.id);
+      if (el && el.children.length === 0) {
+        new QRCode(el, { text: url, width: 140, height: 140, colorDark: '#2c2416', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
       }
     });
   }, 200);
+};
+
+// ── 印刷ボタン：押したときだけ印刷用シートを生成してprint() ──
+window.preparePrint = async function() {
+  const baseUrl = document.getElementById('base-url-input').value.trim();
+  const printArea = document.getElementById('print-area');
+  const btn = document.getElementById('print-btn');
+  const activeSpaces = spaces.filter(sp => sp.active !== false);
+
+  btn.textContent = '⏳ 準備中…';
+  btn.disabled = true;
+  printArea.innerHTML = '';
+
+  // 印刷用シートを生成
+  let currentSheet = null;
+  activeSpaces.forEach((sp, i) => {
+    const url = `${baseUrl}?space=${sp.id}`;
+    const suffix = 'prt-' + sp.id;
+    if (i % 2 === 0) {
+      currentSheet = document.createElement('div');
+      currentSheet.className = 'print-sheet';
+      currentSheet.style.cssText = 'width:297mm;height:210mm;display:flex;flex-direction:row;';
+      currentSheet.innerHTML = makeHalf(sp, url, i * 13, suffix);
+      printArea.appendChild(currentSheet);
+    } else if (currentSheet) {
+      currentSheet.innerHTML +=
+        `<div style="width:0.5px;height:210mm;background:#c0a870;flex-shrink:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>` +
+        makeHalf(sp, url, i * 13 + 7, suffix);
+    }
+  });
+
+  // QR生成を待ってから印刷
+  await new Promise(resolve => {
+    let remaining = activeSpaces.length;
+    if (remaining === 0) { resolve(); return; }
+    activeSpaces.forEach(sp => {
+      const url = `${baseUrl}?space=${sp.id}`;
+      const el = document.getElementById('qr-print-prt-' + sp.id);
+      if (el) {
+        new QRCode(el, { text: url, width: 140, height: 140, colorDark: '#2c2416', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+      }
+      remaining--;
+      if (remaining === 0) resolve();
+    });
+  });
+
+  // 少し待ってQRが描画されてから印刷
+  setTimeout(() => {
+    window.print();
+    // 印刷後にクリーンアップ
+    setTimeout(() => {
+      printArea.innerHTML = '';
+      btn.textContent = '🖨 印刷';
+      btn.disabled = false;
+    }, 1000);
+  }, 500);
 };
 
 // ── 起動 ──────────────────────────────────────────────────
