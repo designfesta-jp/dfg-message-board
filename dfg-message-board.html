@@ -628,54 +628,50 @@ document.addEventListener('click', e => {
 
 window.selectLang = async function(lang) {
   document.getElementById('lang-menu').style.display = 'none';
-  document.querySelectorAll('.lang-item').forEach(b => {
+  document.querySelectorAll('.lang-item').forEach(function(b) {
     b.classList.toggle('active-lang', b.dataset.lang === lang);
   });
   if (lang === currentLang) return;
   currentLang = lang;
-  if (lang === 'ja') {
-    renderNotes(allMessages); return;
-  }
-  // 翻訳が必要なメッセージを抽出（非翻訳・非隠しのもの）
-  const toTranslate = allMessages.filter(m => !m.hidden && !m.deleted && m.text &&
-    !(translationCache[m.id] && translationCache[m.id][lang]));
+  if (lang === 'ja') { renderNotes(allMessages); return; }
+  var toTranslate = allMessages.filter(function(m) {
+    return !m.hidden && !m.deleted && m.text &&
+      !(translationCache[m.id] && translationCache[m.id][lang]);
+  });
   if (toTranslate.length === 0) { renderNotes(allMessages); return; }
-  // ローディング表示
-  const overlay = document.createElement('div');
+  var overlay = document.createElement('div');
   overlay.className = 'translating-overlay';
-  overlay.innerHTML = '<div class="translating-box">🌐 翻訳中…</div>';
+  overlay.innerHTML = '<div class="translating-box">&#x1F310; 翻訳中…</div>';
   document.body.appendChild(overlay);
   try {
-    // まとめて翻訳（Claude API）
-    const langNames = { en:'English', ko:'Korean', 'zh-tw':'Traditional Chinese', 'zh-cn':'Simplified Chinese' };
-    const texts = toTranslate.map((m,i) => `[${i}] ${m.text}`).join('\n');
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    var langNames = { en:'English', ko:'Korean', 'zh-tw':'Traditional Chinese', 'zh-cn':'Simplified Chinese' };
+    var sep = String.fromCharCode(10);
+    var texts = toTranslate.map(function(m,i){ return '[' + i + '] ' + m.text; }).join(sep);
+    var prompt = 'Translate the following messages to ' + langNames[lang] + '. Keep the [N] index prefix. Output only translations, one per line, no explanations.' + String.fromCharCode(10,10) + texts;
+    var resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 2000,
-        messages: [{
-          role: 'user',
-          content: `Translate the following messages to ${langNames[lang]}. Keep the [N] index prefix. Output only translations, one per line, no explanations.\n\n${texts}`
-        }]
+        messages: [{ role: 'user', content: prompt }]
       })
     });
-    const data = await resp.json();
-    const result = data.content?.[0]?.text || '';
-    const lines = result.split('\n').filter(l => l.trim());
-    lines.forEach(line => {
-      const m = line.match(/^\[(\d+)\]\s*(.*)/);
-      if (m) {
-        const idx = parseInt(m[1]);
-        const translated = m[2].trim();
+    var data = await resp.json();
+    var result = (data.content && data.content[0] && data.content[0].text) ? data.content[0].text : '';
+    var lines = result.split(String.fromCharCode(10)).filter(function(l){ return l.trim(); });
+    lines.forEach(function(line) {
+      var matched = line.match(/^\[(\d+)\]\s*(.*)/);
+      if (matched) {
+        var idx = parseInt(matched[1]);
+        var translated = matched[2].trim();
         if (toTranslate[idx]) {
           if (!translationCache[toTranslate[idx].id]) translationCache[toTranslate[idx].id] = {};
           translationCache[toTranslate[idx].id][lang] = translated;
         }
       }
     });
-  } catch(e) { console.error('翻訳エラー:', e); }
+  } catch(e) { console.error('translate error:', e); }
   overlay.remove();
   renderNotes(allMessages);
 };
