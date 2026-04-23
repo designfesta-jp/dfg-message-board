@@ -29,15 +29,29 @@
     }
 
     /* ── コルクボード ── */
+    #cork-svg { position: fixed; width: 0; height: 0; }
+
+    @keyframes sparkle {
+      0%,100% { opacity: 0; transform: scale(0.5) rotate(0deg); }
+      50% { opacity: 1; transform: scale(1.2) rotate(180deg); }
+    }
+    @keyframes twinkle {
+      0%,100% { opacity: 0.2; }
+      50% { opacity: 1; }
+    }
+
     #board {
       flex: 1;
       overflow-y: auto;
-      background:
-        radial-gradient(ellipse at 18% 25%, rgba(200,150,80,0.22) 0%, transparent 55%),
-        radial-gradient(ellipse at 82% 72%, rgba(140,90,35,0.18) 0%, transparent 50%),
-        repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(100,60,10,0.04) 3px, rgba(100,60,10,0.04) 4px),
-        repeating-linear-gradient(90deg, transparent, transparent 3px, rgba(100,60,10,0.03) 3px, rgba(100,60,10,0.03) 4px),
-        linear-gradient(140deg, #c8964a 0%, #b07030 35%, #c49050 65%, #b07530 100%);
+      background-color: #b87d35;
+      background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='cork'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0.3'/%3E%3CfeBlend in='SourceGraphic' mode='multiply'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23cork)' opacity='0.4'/%3E%3C/svg%3E"),
+        repeating-linear-gradient(15deg, transparent, transparent 12px, rgba(160,100,30,0.06) 12px, rgba(160,100,30,0.06) 13px),
+        repeating-linear-gradient(105deg, transparent, transparent 18px, rgba(100,60,10,0.05) 18px, rgba(100,60,10,0.05) 19px),
+        radial-gradient(ellipse at 20% 20%, rgba(220,170,90,0.35) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(140,85,25,0.3) 0%, transparent 45%),
+        radial-gradient(ellipse at 60% 40%, rgba(200,140,60,0.2) 0%, transparent 40%),
+        linear-gradient(135deg, #c8924a 0%, #a86828 25%, #c49050 50%, #b07030 75%, #c08840 100%);
       -webkit-overflow-scrolling: touch;
     }
 
@@ -135,11 +149,47 @@
     .pin-exhibitor { background: radial-gradient(circle at 38% 32%, #FFD54F, #F57F17); }
     .pin-hidden { background: #bbb; }
 
-    .sticky-exhibitor-tag {
-      position: absolute; top: 5px; right: 7px;
-      font-size: 9px; background: #F57F17; color: #fff;
-      border-radius: 4px; padding: 1px 5px; letter-spacing: 0.5px;
+    /* ── 出展者付箋専用スタイル ── */
+    .sticky.exhibitor-sticky {
+      background: linear-gradient(135deg, #FFFDE7 0%, #FFF8C0 40%, #FFFACD 100%) !important;
+      border: 2px solid #D4AF37 !important;
+      outline: 1px solid #F5D76E;
+      box-shadow:
+        0 0 0 3px rgba(212,175,55,0.15),
+        3px 6px 16px rgba(0,0,0,0.25),
+        0 1px 3px rgba(0,0,0,0.15),
+        inset 0 0 20px rgba(255,220,80,0.08) !important;
     }
+
+    .sticky-exhibitor-ribbon {
+      position: absolute; top: -1px; right: -1px;
+      width: 52px; height: 52px; overflow: hidden; z-index: 2;
+    }
+    .sticky-exhibitor-ribbon::before {
+      content: '出展者';
+      position: absolute; top: 12px; right: -14px;
+      background: linear-gradient(135deg, #D4AF37, #F5D76E);
+      color: #5a3e00; font-size: 8px; font-weight: 700;
+      padding: 3px 18px; transform: rotate(45deg);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    .pin-exhibitor-star {
+      position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+      font-size: 18px; line-height: 1;
+      filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4));
+      z-index: 3;
+    }
+
+    /* キラキラ */
+    .sparkle {
+      position: absolute; pointer-events: none; z-index: 2;
+      font-size: 11px; animation: sparkle 2s infinite;
+      color: #D4AF37;
+    }
+    .sparkle:nth-child(odd) { animation-name: twinkle; color: #F5D76E; }
     .hidden-label { font-size: 11px; color: #999; font-style: italic; margin-bottom: 4px; }
 
     .sticky-text {
@@ -575,16 +625,34 @@ function renderNotes(messages) {
     const tilt       = tiltDeg(msg.id);
 
     const el = document.createElement("div");
-    el.className = "sticky" + (isHidden ? " hidden-note" : "");
+    const exhibitorClass = isExhibMsg && !isHidden ? " exhibitor-sticky" : "";
+    el.className = "sticky" + (isHidden ? " hidden-note" : "") + exhibitorClass;
     el.style.background  = isHidden ? "#ddd" : color.bg;
     el.style.border      = `1px solid ${isHidden ? "#bbb" : color.border}`;
     el.style.transform   = `rotate(${tilt}deg)`;
 
-    const pinClass = isHidden ? "pin pin-hidden" : isExhibMsg ? "pin pin-exhibitor" : "pin pin-visitor";
+    // キラキラ装飾（出展者のみ）
+    const sparkles = isExhibMsg && !isHidden ? `
+      <span class="sparkle" style="top:18px;left:8px;animation-delay:0s">✦</span>
+      <span class="sparkle" style="top:22px;right:8px;animation-delay:0.7s">✧</span>
+      <span class="sparkle" style="bottom:18px;left:12px;animation-delay:1.3s">✦</span>
+      <span class="sparkle" style="bottom:14px;right:10px;animation-delay:0.4s">✧</span>
+    ` : "";
+
+    const pinHtml = isHidden
+      ? `<div class="pin pin-hidden"></div>`
+      : isExhibMsg
+        ? `<div class="pin-exhibitor-star">⭐</div>`
+        : `<div class="pin pin-visitor"></div>`;
+
+    const ribbonHtml = isExhibMsg && !isHidden
+      ? `<div class="sticky-exhibitor-ribbon"></div>`
+      : "";
 
     el.innerHTML = `
-      <div class="${pinClass}"></div>
-      ${isExhibMsg && !isHidden ? `<div class="sticky-exhibitor-tag">出展者</div>` : ""}
+      ${pinHtml}
+      ${ribbonHtml}
+      ${sparkles}
       ${isHidden ? `<div class="hidden-label">${msg.hiddenBy === "admin" ? "管理者によって非公開" : "非公開"}</div>` : ""}
       ${!isHidden ? `<p class="sticky-text">${escHtml(msg.text)}</p>` : ""}
       <div class="sticky-footer">
