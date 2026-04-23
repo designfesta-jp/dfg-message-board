@@ -412,7 +412,7 @@
       </div>
       <div class="btn-row">
         <button class="btn btn-primary btn-sm" onclick="renderQRList()">🔄 QRコードを更新</button>
-        <button class="btn btn-ghost btn-sm" id="print-btn" onclick="preparePrint()">🖨 印刷</button>
+        <button class="btn btn-ghost btn-sm" id="print-btn" onclick="window.print()">🖨 印刷</button>
       </div>
     </div>
     <div id="qr-list-area"></div>
@@ -1157,30 +1157,7 @@ window.renderQRList = function() {
 
   area.appendChild(previewWrap);
 
-  // ── QR生成（小さめ・軽量）──
-  setTimeout(() => {
-    activeSpaces.forEach(sp => {
-      const url = `${baseUrl}?space=${sp.id}`;
-      const el = document.getElementById('qr-prev-' + sp.id);
-      if (el && el.children.length === 0) {
-        new QRCode(el, { text: url, width: 80, height: 80, colorDark: '#2c2416', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.L });
-      }
-    });
-  }, 100);
-};
-
-// ── 印刷ボタン：押したときだけ印刷用シートを生成してprint() ──
-window.preparePrint = async function() {
-  const baseUrl = document.getElementById('base-url-input').value.trim();
-  const printArea = document.getElementById('print-area');
-  const btn = document.getElementById('print-btn');
-  const activeSpaces = spaces.filter(sp => sp.active !== false);
-
-  btn.textContent = '⏳ 準備中…';
-  btn.disabled = true;
-  printArea.innerHTML = '';
-
-  // 印刷用シートを生成
+  // ── 印刷用シートを同時に生成 ──
   let currentSheet = null;
   activeSpaces.forEach((sp, i) => {
     const url = `${baseUrl}?space=${sp.id}`;
@@ -1193,34 +1170,29 @@ window.preparePrint = async function() {
       printArea.appendChild(currentSheet);
     } else if (currentSheet) {
       currentSheet.innerHTML +=
-        `<div style="width:0.5px;height:210mm;background:#c0a870;flex-shrink:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>` +
+        '<div style="width:0.5px;height:210mm;background:#c0a870;flex-shrink:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>' +
         makeHalf(sp, url, i * 13 + 7, suffix);
     }
   });
 
-  // QR生成を待ってから印刷
-  await new Promise(resolve => {
-    let remaining = activeSpaces.length;
-    if (remaining === 0) { resolve(); return; }
+  // ── QR生成（プレビュー用・印刷用を同時に） ──
+  setTimeout(() => {
     activeSpaces.forEach(sp => {
       const url = `${baseUrl}?space=${sp.id}`;
-      const el = document.getElementById('qr-print-prt-' + sp.id);
-      if (el) {
-        new QRCode(el, { text: url, width: 140, height: 140, colorDark: '#2c2416', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+      const prevEl = document.getElementById('qr-prev-' + sp.id);
+      if (prevEl && prevEl.children.length === 0) {
+        new QRCode(prevEl, { text: url, width: 80, height: 80, colorDark: '#2c2416', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.L });
       }
-      remaining--;
-      if (remaining === 0) resolve();
+      const prtEl = document.getElementById('qr-print-prt-' + sp.id);
+      if (prtEl && prtEl.children.length === 0) {
+        new QRCode(prtEl, { text: url, width: 140, height: 140, colorDark: '#2c2416', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+      }
     });
-  });
-
-  // QRの描画完了を待ってから印刷（2秒待機）
-  // ※印刷用DOMは削除しない（削除するとプリンターにデータが届かないため）
-  setTimeout(() => {
-    btn.textContent = '🖨 印刷';
-    btn.disabled = false;
-    window.print();
-  }, 2000);
+  }, 100);
 };
+
+// ── 印刷ボタン：押したときだけ印刷用シートを生成してprint() ──
+
 
 // ── 起動 ──────────────────────────────────────────────────
 init();
