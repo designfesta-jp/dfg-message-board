@@ -452,11 +452,43 @@ let spaces  = [];   // [{id, name, artist, period, sns:[], exhibitorPassword, ac
 let reports = [];
 let currentMessages = [];
 
-// ── parseText（dfg-generatorと同じロジック） ─────────────
+// ── parseText（新ブックマーク：JSON形式 / 旧：テキスト形式 両対応） ──
 function parseText(raw) {
+  // 新ブックマーク（JSON形式）
+  try {
+    const j = JSON.parse(raw);
+    if (j && j.title !== undefined) {
+      // snsを配列から最初のURLに変換
+      const sns = Array.isArray(j.snsAll) && j.snsAll.length > 0 ? j.snsAll[0] : (j.sns || '');
+      return {
+        title:      j.title || '',
+        space:      j.spaceNumber || '',
+        floor:      '',
+        period:     j.period || '',
+        genre:      j.genre || '',
+        content:    j.content || '',
+        concept:    j.concept || '',
+        artistName: j.artistName || j.title || '',
+        members:    j.members || '',
+        profile:    j.profile || '',
+        sns:        sns,
+        snsAll:     j.snsAll || [],
+        hp:         j.hp || '',
+      };
+    }
+  } catch(e) {}
+
+  // 旧ブックマーク（テキスト形式）フォールバック
   const lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   const d = { title:'', space:'', floor:'', period:'', genre:'', content:'', concept:'', artistName:'', members:'', profile:'', sns:'' };
-  const KEYS = { 'スペース':'space','会期':'period','ジャンル':'genre','展示内容':'content','展示コンセプト':'concept','アーティスト名':'artistName','メンバー構成':'members','プロフィール':'profile','SNS':'sns','展示情報':null,'アーティスト情報':null };
+  const KEYS = {
+    'スペース':'space','会期':'period','ジャンル':'genre',
+    '展示内容':'content','展示コンセプト':'concept',
+    'アーティスト名':'artistName','メンバー構成':'members',
+    'プロフィール':'profile','SNS':'sns',
+    '展示情報':null,'アーティスト情報':null,
+    '活動内容':null,'HP':null,'受賞歴':null,'経歴':null,'備考':null,
+  };
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
@@ -465,21 +497,36 @@ function parseText(raw) {
     if (/^https?:\/\//.test(line)) { if (!d.sns) d.sns = line; i++; continue; }
     if (line === 'スペース') {
       if (lines[i+1]) d.space = lines[i+1];
-      if (lines[i+2] && !/^展示|^アーティスト|^会期|^ジャンル|^スペース/.test(lines[i+2])) { d.floor = lines[i+2]; i += 3; } else { i += 2; }
+      if (lines[i+2] && !/^展示|^アーティスト|^会期|^ジャンル|^スペース|^活動|^HP|^プロフィール|^受賞|^経歴|^メンバー|^備考/.test(lines[i+2])) {
+        d.floor = lines[i+2]; i += 3;
+      } else { i += 2; }
       continue;
     }
     if (KEYS[line] !== undefined) {
       const key = KEYS[line];
       if (key === null) { i++; continue; }
-      if (key === 'sns') { if (lines[i+1] && /^https?:\/\//.test(lines[i+1])) { d.sns = lines[i+1]; i += 2; } else { i++; } continue; }
+      if (key === 'sns') {
+        if (lines[i+1] && /^https?:\/\//.test(lines[i+1])) { d.sns = lines[i+1]; i += 2; }
+        else { i++; }
+        continue;
+      }
       i++;
       let val = '';
-      while (i < lines.length && KEYS[lines[i]] === undefined && !/^「.+」$/.test(lines[i]) && !/^https?:\/\//.test(lines[i])) { val += (val ? '\n' : '') + lines[i]; i++; }
+      if (key === 'artistName') {
+        if (i < lines.length && KEYS[lines[i]] === undefined && !/^https?:\/\//.test(lines[i])) {
+          val = lines[i]; i++;
+        }
+      } else {
+        while (i < lines.length && KEYS[lines[i]] === undefined && !/^「.+」$/.test(lines[i]) && !/^https?:\/\//.test(lines[i])) {
+          val += (val ? '\n' : '') + lines[i]; i++;
+        }
+      }
       d[key] = val.trim();
       continue;
     }
     i++;
   }
+  if (!d.artistName && d.title) d.artistName = d.title;
   return d;
 }
 
@@ -827,8 +874,11 @@ window.importQueue = async function() {
     for (const item of queueDocs) {
       const d = parseText(item.raw || '');
       const spaceId = 'space-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
-      const snsArr = d.sns ? [{ type: detectSnsType(d.sns), url: d.sns, label: d.sns.replace(/^https?:\/\//, '').replace(/\/$/, '') }] : [];
-      const spaceNumber = [d.space, d.floor].filter(Boolean).join(' ');
+      // SNS: 新形式はsnsAllに複数URL、旧形式はd.snsに1つ
+      const snsArr = (d.snsAll && d.snsAll.length > 0 ? d.snsAll : (d.sns ? [d.sns] : []))
+        .map(url => ({ type: detectSnsType(url), url, label: url.replace(/^https?:\/\//, '').replace(/\/$/, '').split('/').slice(0,2).join('/') }));
+      // spaceNumber: 新形式はd.spaceに結合済み、旧形式はd.space+d.floor
+      const spaceNumber = d.space || [d.space, d.floor].filter(Boolean).join(' ');
 
       await setDoc(doc(db, 'spaces', spaceId), {
         name: d.title || '',
