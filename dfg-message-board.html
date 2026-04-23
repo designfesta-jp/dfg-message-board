@@ -757,21 +757,33 @@ async function init() {
   // 会期からスタンプを表示
   if (spaceData.period) {
     const periodStr = spaceData.period;
-    // 日付を抽出（YYYY/MM/DD または YYYY年MM月DD日 形式）
-    const dateMatches = periodStr.match(/(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})/g);
-    if (dateMatches && dateMatches.length >= 2) {
-      const parseDate = s => {
-        const m = s.match(/(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})/);
-        return m ? new Date(m[1], m[2]-1, m[3]) : null;
-      };
-      const start = parseDate(dateMatches[0]);
-      const end   = parseDate(dateMatches[1]);
-      const today = new Date(); today.setHours(0,0,0,0);
-      const stampEl  = document.getElementById('status-stamp');
-      const circleEl = document.getElementById('stamp-circle');
-      const jaEl     = document.getElementById('stamp-ja');
-      const enEl     = document.getElementById('stamp-en');
-      if (start && end) {
+    const stampEl  = document.getElementById('status-stamp');
+    const circleEl = document.getElementById('stamp-circle');
+    const jaEl     = document.getElementById('stamp-ja');
+    const enEl     = document.getElementById('stamp-en');
+    // 開始日（年付き）を取得
+    const startM = periodStr.match(/(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})/);
+    if (startM) {
+      const year  = parseInt(startM[1]);
+      const start = new Date(year, parseInt(startM[2])-1, parseInt(startM[3]));
+      // 終了日：年付き or 年なし(MM/DD)を判定
+      const allFull = periodStr.match(/(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})/g);
+      var end = null;
+      if (allFull && allFull.length >= 2) {
+        const m2 = allFull[1].match(/(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})/);
+        end = new Date(parseInt(m2[1]), parseInt(m2[2])-1, parseInt(m2[3]));
+      } else {
+        // 年なし終了日: "- 04/26" や "〜05/03" など
+        const endM = periodStr.match(/[-〜~]\s*(\d{1,2})[\/\-](\d{1,2})\b/);
+        if (endM) {
+          var em = parseInt(endM[1]), ed = parseInt(endM[2]);
+          var ey = year;
+          if (em < parseInt(startM[2])) ey++;
+          end = new Date(ey, em-1, ed);
+        }
+      }
+      if (end) {
+        const today = new Date(); today.setHours(0,0,0,0);
         stampEl.style.display = 'flex';
         if (today > end) {
           circleEl.className = 'stamp-circle stamp-ended';
