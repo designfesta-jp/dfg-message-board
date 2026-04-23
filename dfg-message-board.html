@@ -84,7 +84,58 @@
       transform: rotate(-1deg);
       box-shadow: 3px 5px 16px rgba(0,0,0,0.22), 0 1px 3px rgba(0,0,0,0.12);
       margin-bottom: 6px;
+      display: flex;
+      gap: 12px;
+      align-items: stretch;
     }
+    .profile-note-content { flex: 1; min-width: 0; }
+
+    /* ── スタンプ ── */
+    .status-stamp {
+      flex-shrink: 0;
+      width: 70px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .stamp-circle {
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      border: 3px solid currentColor;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      transform: rotate(-15deg);
+      opacity: 0.82;
+    }
+    .stamp-circle::before {
+      content: '';
+      position: absolute;
+      inset: 3px;
+      border-radius: 50%;
+      border: 1px solid currentColor;
+      opacity: 0.5;
+    }
+    .stamp-ja {
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      line-height: 1.2;
+    }
+    .stamp-en {
+      font-size: 7px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      opacity: 0.8;
+      margin-top: 2px;
+    }
+    .stamp-active { color: #2e7d52; }
+    .stamp-ended  { color: #8b4513; }
 
     .profile-note .pin {
       width: 18px; height: 18px; border-radius: 50%;
@@ -372,17 +423,26 @@
     <!-- プロフィール付箋 -->
     <div class="profile-note" id="profile-note">
       <div class="pin"></div>
-      <p id="space-spacenum" style="font-size:12px;font-weight:700;color:#8b6f47;margin-bottom:2px"></p>
-      <p id="space-booth" style="font-size:11px;color:#a08c6e;margin-bottom:2px;display:none"></p>
-      <h2 id="space-title">—</h2>
-      <p class="artist" id="space-artist"></p>
-      <p class="period" id="space-period"></p>
-      <div class="sns-links" id="sns-links"></div>
-      <div id="exhibitor-status-area">
+      <div class="profile-note-content">
+        <p id="space-spacenum" style="font-size:12px;font-weight:700;color:#8b6f47;margin-bottom:2px"></p>
+        <p id="space-booth" style="font-size:11px;color:#a08c6e;margin-bottom:2px;display:none"></p>
+        <h2 id="space-title">—</h2>
+        <p class="artist" id="space-artist"></p>
+        <p class="period" id="space-period"></p>
+        <div class="sns-links" id="sns-links"></div>
+        <div id="exhibitor-status-area">
         <button class="exhibitor-login-btn" id="exhibitor-login-btn" onclick="openExhibitorLogin()">🔑 出展者ログイン</button>
         <div class="hidden" id="exhibitor-logged-in" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;">
           <span class="exhibitor-badge">✓ 出展者としてログイン中</span>
           <button class="exhibitor-login-btn" onclick="exhibitorLogout()" style="color:#c0392b;border-color:#e8b4ae;">ログアウト</button>
+        </div>
+        </div>
+      </div>
+      <!-- スタンプ -->
+      <div class="status-stamp" id="status-stamp" style="display:none">
+        <div class="stamp-circle stamp-active" id="stamp-circle">
+          <div class="stamp-ja" id="stamp-ja">開催中</div>
+          <div class="stamp-en" id="stamp-en">ON SHOW</div>
         </div>
       </div>
     </div>
@@ -693,6 +753,38 @@ async function init() {
   document.getElementById("space-title").textContent  = spaceData.name;
   document.getElementById("space-artist").textContent = spaceData.artist || "";
   document.getElementById("space-period").textContent = spaceData.period || "";
+
+  // 会期からスタンプを表示
+  if (spaceData.period) {
+    const periodStr = spaceData.period;
+    // 日付を抽出（YYYY/MM/DD または YYYY年MM月DD日 形式）
+    const dateMatches = periodStr.match(/(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})/g);
+    if (dateMatches && dateMatches.length >= 2) {
+      const parseDate = s => {
+        const m = s.match(/(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})/);
+        return m ? new Date(m[1], m[2]-1, m[3]) : null;
+      };
+      const start = parseDate(dateMatches[0]);
+      const end   = parseDate(dateMatches[1]);
+      const today = new Date(); today.setHours(0,0,0,0);
+      const stampEl  = document.getElementById('status-stamp');
+      const circleEl = document.getElementById('stamp-circle');
+      const jaEl     = document.getElementById('stamp-ja');
+      const enEl     = document.getElementById('stamp-en');
+      if (start && end) {
+        stampEl.style.display = 'flex';
+        if (today > end) {
+          circleEl.className = 'stamp-circle stamp-ended';
+          jaEl.textContent = '終了';
+          enEl.textContent = 'CLOSED';
+        } else {
+          circleEl.className = 'stamp-circle stamp-active';
+          jaEl.textContent = '開催中';
+          enEl.textContent = 'ON SHOW';
+        }
+      }
+    }
+  }
   document.getElementById("welcome-space-name").textContent = spaceData.name;
 
   // スペース名・ブース
