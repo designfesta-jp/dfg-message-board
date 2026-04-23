@@ -663,8 +663,7 @@ window.selectLang = async function(lang) {
     });
     const data = await resp.json();
     const result = data.content?.[0]?.text || '';
-    const lines = result.split('
-').filter(l => l.trim());
+    const lines = result.split('\n').filter(l => l.trim());
     lines.forEach(line => {
       const m = line.match(/^\[(\d+)\]\s*(.*)/);
       if (m) {
