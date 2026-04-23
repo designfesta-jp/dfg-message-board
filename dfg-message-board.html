@@ -644,32 +644,19 @@ window.selectLang = async function(lang) {
   overlay.innerHTML = '<div class="translating-box">&#x1F310; 翻訳中…</div>';
   document.body.appendChild(overlay);
   try {
-    var langNames = { en:'English', ko:'Korean', 'zh-tw':'Traditional Chinese', 'zh-cn':'Simplified Chinese' };
-    var sep = String.fromCharCode(10);
-    var texts = toTranslate.map(function(m,i){ return '[' + i + '] ' + m.text; }).join(sep);
-    var prompt = 'Translate the following messages to ' + langNames[lang] + '. Keep the [N] index prefix. Output only translations, one per line, no explanations.' + String.fromCharCode(10,10) + texts;
-    var resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-    var data = await resp.json();
-    var result = (data.content && data.content[0] && data.content[0].text) ? data.content[0].text : '';
-    var lines = result.split(String.fromCharCode(10)).filter(function(l){ return l.trim(); });
-    lines.forEach(function(line) {
-      var matched = line.match(/^\[(\d+)\]\s*(.*)/);
-      if (matched) {
-        var idx = parseInt(matched[1]);
-        var translated = matched[2].trim();
-        if (toTranslate[idx]) {
-          if (!translationCache[toTranslate[idx].id]) translationCache[toTranslate[idx].id] = {};
-          translationCache[toTranslate[idx].id][lang] = translated;
-        }
-      }
+    var langCodes = { en:'en', ko:'ko', 'zh-tw':'zh-TW', 'zh-cn':'zh-CN' };
+    var tl = langCodes[lang] || 'en';
+    // 各メッセージを個別に翻訳（Google翻訳非公式API）
+    var results = await Promise.all(toTranslate.map(async function(m) {
+      var url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=' + tl + '&dt=t&q=' + encodeURIComponent(m.text);
+      var r = await fetch(url);
+      var d = await r.json();
+      var translated = d[0] ? d[0].map(function(x){ return x[0]; }).join('') : m.text;
+      return { id: m.id, translated: translated };
+    }));
+    results.forEach(function(r) {
+      if (!translationCache[r.id]) translationCache[r.id] = {};
+      translationCache[r.id][lang] = r.translated;
     });
   } catch(e) { console.error('translate error:', e); }
   overlay.remove();
@@ -893,15 +880,24 @@ window.submitExhibitorLogin = function() {
   const pw = document.getElementById("exhibitor-pw-input").value;
   if (pw === (spaceData?.exhibitorPassword || "passA")) {
     isExhibitor = true;
+    // アーティスト名を自動セット
+    if (spaceData?.artist) myNick = spaceData.artist;
     document.getElementById('exhibitor-login-btn').style.display = 'none';
     document.getElementById('exhibitor-logged-in').style.display = 'flex';
     closeExhibitorLogin();
-    // 付箋を再描画（非公開付箋を表示するため）
     if (window._messages) renderNotes(window._messages);
   } else {
     document.getElementById("exhibitor-pw-err").classList.remove("hidden");
     document.getElementById("exhibitor-pw-input").value = "";
   }
+};
+
+window.exhibitorLogout = function() {
+  isExhibitor = false;
+  myNick = '来場者';
+  document.getElementById('exhibitor-login-btn').style.display = 'inline-block';
+  document.getElementById('exhibitor-logged-in').style.display = 'none';
+  if (window._messages) renderNotes(window._messages);
 };
 
 document.getElementById("exhibitor-pw-input").addEventListener("keydown", e => {
