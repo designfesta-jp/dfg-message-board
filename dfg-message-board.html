@@ -406,11 +406,11 @@
     <div style="position:relative;">
       <button id="lang-btn" onclick="toggleLangMenu()" style="background:rgba(196,160,130,0.9);color:#2c2416;border:none;border-radius:20px;padding:14px 14px;font-size:14px;cursor:pointer;box-shadow:0 4px 20px rgba(139,111,71,0.5);">🌐</button>
       <div id="lang-menu" style="display:none;position:absolute;bottom:54px;right:0;background:#fff;border:1px solid #e0d5c3;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.15);min-width:120px;">
-        <button class="lang-item active-lang" data-lang="ja" onclick="selectLang('ja')">🇯🇵 日本語</button>
-        <button class="lang-item" data-lang="en" onclick="selectLang('en')">🇬🇧 English</button>
-        <button class="lang-item" data-lang="ko" onclick="selectLang('ko')">🇰🇷 한국어</button>
-        <button class="lang-item" data-lang="zh-tw" onclick="selectLang('zh-tw')">🇹🇼 繁體中文</button>
-        <button class="lang-item" data-lang="zh-cn" onclick="selectLang('zh-cn')">🇨🇳 简体中文</button>
+        <button class="lang-item active-lang" data-lang="ja" onclick="selectLang('ja')">日</button>
+        <button class="lang-item" data-lang="en" onclick="selectLang('en')">EN</button>
+        <button class="lang-item" data-lang="ko" onclick="selectLang('ko')">한</button>
+        <button class="lang-item" data-lang="zh-tw" onclick="selectLang('zh-tw')">中繁</button>
+        <button class="lang-item" data-lang="zh-cn" onclick="selectLang('zh-cn')">中简</button>
       </div>
     </div>
   </div>
@@ -648,8 +648,7 @@ window.selectLang = async function(lang) {
   try {
     // まとめて翻訳（Claude API）
     const langNames = { en:'English', ko:'Korean', 'zh-tw':'Traditional Chinese', 'zh-cn':'Simplified Chinese' };
-    const texts = toTranslate.map((m,i) => `[${i}] ${m.text}`).join('
-');
+    const texts = toTranslate.map((m,i) => `[${i}] ${m.text}`).join('\n');
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -658,9 +657,7 @@ window.selectLang = async function(lang) {
         max_tokens: 2000,
         messages: [{
           role: 'user',
-          content: `Translate the following messages to ${langNames[lang]}. Keep the [N] index prefix. Output only translations, one per line, no explanations.
-
-${texts}`
+          content: `Translate the following messages to ${langNames[lang]}. Keep the [N] index prefix. Output only translations, one per line, no explanations.\n\n${texts}`
         }]
       })
     });
