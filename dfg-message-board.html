@@ -93,46 +93,46 @@
     /* ── スタンプ ── */
     .status-stamp {
       flex-shrink: 0;
-      width: 70px;
+      width: 90px;
       display: flex;
       align-items: center;
       justify-content: center;
       position: relative;
     }
     .stamp-circle {
-      width: 68px;
-      height: 68px;
+      width: 86px;
+      height: 86px;
       border-radius: 50%;
-      border: 3px solid currentColor;
+      border: 4px solid currentColor;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       position: relative;
       transform: rotate(-15deg);
-      opacity: 0.82;
+      opacity: 0.85;
     }
     .stamp-circle::before {
       content: '';
       position: absolute;
-      inset: 3px;
+      inset: 4px;
       border-radius: 50%;
-      border: 1px solid currentColor;
-      opacity: 0.5;
+      border: 1.5px solid currentColor;
+      opacity: 0.45;
     }
     .stamp-ja {
-      font-size: 13px;
+      font-size: 17px;
       font-weight: 900;
       letter-spacing: 1px;
       line-height: 1.2;
     }
     .stamp-en {
-      font-size: 7px;
+      font-size: 8px;
       font-weight: 700;
-      letter-spacing: 1.5px;
+      letter-spacing: 2px;
       text-transform: uppercase;
       opacity: 0.8;
-      margin-top: 2px;
+      margin-top: 3px;
     }
     .stamp-active { color: #2e7d52; }
     .stamp-ended  { color: #8b4513; }
