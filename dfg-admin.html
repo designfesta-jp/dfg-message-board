@@ -301,7 +301,8 @@
       #tab-qr { display: block !important; padding: 0; max-width: none; }
       #qr-list-area { display: none !important; }
       #print-area { display: block !important; }
-      .print-sheet { page-break-after: always; width: 297mm; height: 210mm; }
+      .print-sheet { width: 297mm; height: 210mm; }
+      .print-sheet:not(:last-child) { page-break-after: always; }
     }
   </style>
 </head>
@@ -1030,11 +1031,15 @@ const QR_COLORS = [
   {bg:'#FFE0B2',border:'#FFCC80'},{bg:'#F8BBD0',border:'#F48FB1'},
 ];
 const QR_TEXTS = [
-  'とても素敵な作品でした！','また来ます♪','感動しました',
-  '応援しています！','素晴らしいです','大好きです',
-  'ありがとう','また会いましょう','元気もらいました',
-  '最高でした！','また来るね','頑張って！','癒されました',
-  'ずっと見ていられる','好きです！',
+  'また来ます♪','感動しました','素晴らしいです',
+  '応援しています！','癒されました','最高でした！',
+  'ずっと見ていられる','ありがとう',
+  'Amazing work!','So beautiful!','I love this!',
+  'Come back soon!','Truly inspiring',
+  '정말 멋져요！','또 올게요♪','감동이에요',
+  '응원합니다！','최고예요！',
+  '好美啊！','感動了','真棒！支持你',
+  '真的很棒！','下次再来','加油！','太喜欢了！',
 ];
 
 function makeStickyNote(text, color, rotate, left, top, pinColor) {
@@ -1046,29 +1051,38 @@ function makeStickyNote(text, color, rotate, left, top, pinColor) {
 
 const PIN_COLORS = ['#ff6b6b','#ffd93d','#6bcb77','#4d96ff','#c77dff','#ff9f1c'];
 
-function generateNotes(seed, qrLeft, qrTop, qrW, qrH) {
-  // グリッドで敷き詰め、QRエリアのみスキップ
-  const cols = 4, rows = 6;
-  const cellW = 36, cellH = 32;
-  const startX = 1, startY = 16;
+function generateNotes(seed, qrCX, qrCY, qrW, qrH) {
+  // 5列×6行グリッド、QR中心付近をスキップ、最大20枚
+  const cols = 5, rows = 6;
+  const cellW = 28, cellH = 30;
+  const startX = 2, startY = 14;
   let notes = '';
   let idx = seed;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const x = startX + c * cellW + (Math.sin(idx * 3.7) * 4);
+  let count = 0;
+  const usedTexts = new Set();
+  for (let r = 0; r < rows && count < 20; r++) {
+    for (let c = 0; c < cols && count < 20; c++) {
+      const x = startX + c * cellW + (Math.sin(idx * 3.7) * 3);
       const y = startY + r * cellH + (Math.cos(idx * 2.1) * 3);
-      // QRエリアと重なる場合はスキップ（余白込み）
-      const margin = 5;
-      if (x + 32 > qrLeft - margin && x < qrLeft + qrW + margin &&
-          y + 26 > qrTop  - margin && y < qrTop  + qrH + margin) {
+      // QR中心からの距離でスキップ（QRに寄せるため余白を小さく）
+      const margin = 4;
+      const qrL = qrCX - qrW/2 - margin;
+      const qrR = qrCX + qrW/2 + margin;
+      const qrT = qrCY - qrH/2 - margin;
+      const qrB = qrCY + qrH/2 + margin;
+      if (x + 26 > qrL && x < qrR && y + 26 > qrT && y < qrB) {
         idx++; continue;
       }
       const rot = Math.sin(idx * 5.2) * 7;
       const color = QR_COLORS[Math.abs(Math.floor(Math.sin(idx * 11.3) * 100)) % QR_COLORS.length];
-      const text  = QR_TEXTS[Math.abs(Math.floor(Math.cos(idx * 6.1) * 100)) % QR_TEXTS.length];
       const pin   = PIN_COLORS[Math.abs(Math.floor(Math.sin(idx * 9.1) * 100)) % PIN_COLORS.length];
-      notes += makeStickyNote(text, color, rot, x, y, pin);
-      idx++;
+      // 重複しないテキスト選択
+      let ti = Math.abs(Math.floor(Math.cos(idx * 6.1) * 100)) % QR_TEXTS.length;
+      let attempts = 0;
+      while (usedTexts.has(QR_TEXTS[ti]) && attempts < QR_TEXTS.length) { ti = (ti+1) % QR_TEXTS.length; attempts++; }
+      usedTexts.add(QR_TEXTS[ti]);
+      notes += makeStickyNote(QR_TEXTS[ti], color, rot, x, y, pin);
+      idx++; count++;
     }
   }
   return notes;
@@ -1077,7 +1091,8 @@ function generateNotes(seed, qrLeft, qrTop, qrW, qrH) {
 function makeHalf(sp, url, seed, idSuffix) {
   const spName = sp.spaceNumber || '';
   // QRエリアは中央（74mm, 105mm）、サイズ約60×70mm
-  const notes = generateNotes(seed, 44, 70, 60, 70);
+  // QR中心: x=74mm(148.5の半分), y=118mm(210の半分+ヘッダー分少し下)、サイズ55×60mm
+  const notes = generateNotes(seed, 74, 118, 55, 60);
   return `
     <div style="width:148.5mm;height:210mm;position:relative;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#b87d35;background-image:radial-gradient(ellipse at 18% 25%,rgba(200,150,80,0.22) 0%,transparent 55%),radial-gradient(ellipse at 82% 72%,rgba(140,90,35,0.18) 0%,transparent 50%),repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(100,60,10,0.04) 3px,rgba(100,60,10,0.04) 4px),repeating-linear-gradient(90deg,transparent,transparent 3px,rgba(100,60,10,0.03) 3px,rgba(100,60,10,0.03) 4px),linear-gradient(140deg,#c8964a 0%,#b07030 35%,#c49050 65%,#b07530 100%);">
       <!-- ヘッダー -->
@@ -1108,15 +1123,32 @@ window.renderQRList = function() {
 
   const activeSpaces = spaces.filter(sp => sp.active !== false);
 
-  // ── 画面プレビュー（印刷と同じデザインを縮小表示）──
+  // ── 画面プレビュー（縮小・QRは省略して軽量化）──
   const previewWrap = document.createElement('div');
-  previewWrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:16px;margin-top:8px;justify-content:flex-start;';
+  previewWrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;';
 
   activeSpaces.forEach((sp, i) => {
     const url = `${baseUrl}?space=${sp.id}`;
+    const spName = sp.spaceNumber || sp.id;
+    // 付箋のみ生成（QR省略）
+    const notes = generateNotes(i * 13, 74, 118, 55, 60);
+    const halfHtml = `
+      <div style="width:148.5mm;height:210mm;position:relative;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#b87d35;background-image:radial-gradient(ellipse at 18% 25%,rgba(200,150,80,0.22) 0%,transparent 55%),linear-gradient(140deg,#c8964a 0%,#b07030 35%,#c49050 65%,#b07530 100%);">
+        <div style="position:absolute;top:0;left:0;right:0;z-index:10;text-align:center;padding:5mm 6mm 4mm;background:rgba(44,36,22,0.22);">
+          <div style="font-size:22px;font-weight:700;color:#fff;letter-spacing:1px;text-shadow:0 2px 6px rgba(0,0,0,0.6);line-height:1.3;">📌 アーティストに応援を送りましょう！</div>
+        </div>
+        ${notes}
+        <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:20;text-align:center;">
+          <div style="position:relative;background:#FFFDE7;border:1px solid #FFD54F;border-radius:3px;padding:12px 14px 10px;box-shadow:3px 5px 16px rgba(0,0,0,0.28);">
+            <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);width:15px;height:15px;border-radius:50%;background:radial-gradient(circle at 38% 32%,#ef5350,#b71c1c);box-shadow:0 2px 5px rgba(0,0,0,0.4);"></div>
+            <div style="width:140px;height:140px;background:#f0e8d8;display:flex;align-items:center;justify-content:center;font-size:11px;color:#a08c6e;margin-bottom:8px;">QRコード</div>
+            <div style="font-size:10px;font-weight:700;color:#6b5a42;">${escHtml(sp.artist || '')}</div>
+          </div>
+        </div>
+      </div>`;
     const wrapper = document.createElement('div');
     wrapper.style.cssText = 'transform-origin:top left;transform:scale(0.45);width:148.5mm;height:210mm;flex-shrink:0;margin-bottom:-116mm;margin-right:-82mm;';
-    wrapper.innerHTML = makeHalf(sp, url, i * 13, 'prev-' + sp.id);
+    wrapper.innerHTML = halfHtml;
     previewWrap.appendChild(wrapper);
   });
 
@@ -1142,22 +1174,20 @@ window.renderQRList = function() {
     printArea.appendChild(sheet);
   }
 
-  // ── QR生成（全要素に対して） ──
+  // ── QR生成（印刷用のみ・遅延して生成）──
   setTimeout(() => {
-    activeSpaces.forEach((sp, i) => {
+    activeSpaces.forEach((sp) => {
       const url = `${baseUrl}?space=${sp.id}`;
-      ['prev-' + sp.id, 'prt-' + sp.id].forEach(suffix => {
-        const el = document.getElementById('qr-print-' + suffix);
-        if (el && el.children.length === 0) {
-          new QRCode(el, {
-            text: url, width: 140, height: 140,
-            colorDark: '#2c2416', colorLight: '#ffffff',
-            correctLevel: QRCode.CorrectLevel.M,
-          });
-        }
-      });
+      const el = document.getElementById('qr-print-prt-' + sp.id);
+      if (el && el.children.length === 0) {
+        new QRCode(el, {
+          text: url, width: 140, height: 140,
+          colorDark: '#2c2416', colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M,
+        });
+      }
     });
-  }, 200);
+  }, 300);
 };
 
 // ── 起動 ──────────────────────────────────────────────────
