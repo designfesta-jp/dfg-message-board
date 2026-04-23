@@ -1213,16 +1213,17 @@ window.preparePrint = async function() {
     });
   });
 
-  // 少し待ってQRが描画されてから印刷
+  // QRの描画完了を待ってから印刷（2秒待機）
   setTimeout(() => {
-    window.print();
-    // 印刷後にクリーンアップ
-    setTimeout(() => {
+    const cleanup = () => {
       printArea.innerHTML = '';
       btn.textContent = '🖨 印刷';
       btn.disabled = false;
-    }, 1000);
-  }, 500);
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
+    window.print();
+  }, 2000);
 };
 
 // ── 起動 ──────────────────────────────────────────────────
