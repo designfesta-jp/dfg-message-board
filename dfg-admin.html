@@ -858,7 +858,7 @@ window.checkQueue = async function() {
           <div class="preview-title">${escHtml(d.title || '（タイトルなし）')}</div>
           <div>アーティスト: <strong>${escHtml(d.artistName || '—')}</strong></div>
           ${d.period ? `<div>会期: <strong>${escHtml(d.period)}</strong></div>` : ''}
-          ${d.space ? `<div>スペース: <strong>${escHtml(d.space)}</strong></div>` : ''}
+          ${(d.space || d.floor) ? `<div>スペース: <strong>${escHtml([d.space, d.floor].filter(Boolean).join(' '))}</strong></div>` : ''}
           ${d.sns ? `<div>SNS: <strong>${escHtml(d.sns)}</strong></div>` : ''}
         </div>
       `;
@@ -880,8 +880,8 @@ window.importQueue = async function() {
       // SNS: 新形式はsnsAllに複数URL、旧形式はd.snsに1つ
       const snsArr = (d.snsAll && d.snsAll.length > 0 ? d.snsAll : (d.sns ? [d.sns] : []))
         .map(url => ({ type: detectSnsType(url), url, label: url.replace(/^https?:\/\//, '').replace(/\/$/, '').split('/').slice(0,2).join('/') }));
-      // spaceNumber: 新形式はd.spaceに結合済み、旧形式はd.space+d.floor
-      const spaceNumber = d.space || [d.space, d.floor].filter(Boolean).join(' ');
+      // spaceNumber: space+floorを結合（例: WEST + 2-B → WEST 2-B）
+      const spaceNumber = [d.space, d.floor].filter(Boolean).join(' ') || d.space || '';
 
       await setDoc(doc(db, 'spaces', spaceId), {
         name: d.title || '',
