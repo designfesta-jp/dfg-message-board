@@ -68,10 +68,10 @@
     .pin-hidden { background: #bbb; }
     .sticky.exhibitor-sticky { background: linear-gradient(135deg, #FFFDE7 0%, #FFF8C0 40%, #FFFACD 100%) !important; border: 2px solid #D4AF37 !important; outline: 1px solid #F5D76E; box-shadow: 0 0 0 3px rgba(212,175,55,0.15), 3px 6px 16px rgba(0,0,0,0.25), 0 1px 3px rgba(0,0,0,0.15), inset 0 0 20px rgba(255,220,80,0.08) !important; }
     .sticky-exhibitor-ribbon { position: absolute; top: -1px; right: -1px; width: 52px; height: 52px; overflow: hidden; z-index: 2; }
-    .sticky-exhibitor-ribbon::before { content: '出展者'; position: absolute; top: 12px; right: -14px; background: linear-gradient(135deg, #D4AF37, #F5D76E); color: #5a3e00; font-size: 8px; font-weight: 700; padding: 3px 18px; transform: rotate(45deg); box-shadow: 0 2px 4px rgba(0,0,0,0.2); letter-spacing: 0.5px; white-space: nowrap; }
+    .sticky-exhibitor-ribbon::before { content: 'Artist'; position: absolute; top: 12px; right: -14px; background: linear-gradient(135deg, #D4AF37, #F5D76E); color: #5a3e00; font-size: 8px; font-weight: 700; padding: 3px 18px; transform: rotate(45deg); box-shadow: 0 2px 4px rgba(0,0,0,0.2); letter-spacing: 0.5px; white-space: nowrap; }
     .pin-exhibitor-star { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); font-size: 18px; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4)); z-index: 3; }
-    .sparkle { position: absolute; pointer-events: none; z-index: 2; font-size: 11px; animation: sparkle 2s infinite; color: #D4AF37; }
-    .sparkle:nth-child(odd) { animation-name: twinkle; color: #F5D76E; }
+    .sparkle { position: absolute; pointer-events: none; z-index: 2; font-size: 16px; animation: sparkle 1.6s infinite; color: #D4AF37; text-shadow: 0 0 6px rgba(212,175,55,0.8); }
+    .sparkle:nth-child(odd) { animation-name: twinkle; color: #FFD700; font-size: 13px; text-shadow: 0 0 4px rgba(255,215,0,0.9); }
     .hidden-label { font-size: 11px; color: #999; font-style: italic; margin-bottom: 4px; }
     .sticky-text { font-size: 13px; line-height: 1.65; color: #2c2416; word-break: break-word; margin-bottom: 8px; }
     .sticky-footer { display: flex; align-items: center; justify-content: space-between; }
@@ -338,11 +338,11 @@ function detectBrowserLang() {
 var browserLang = detectBrowserLang();
 
 var UI_TEXT = {
-  ja: { welcome: 'ギャラリーへようこそ', hint: 'ニックネームを入力してください<br><span style="font-size:11px">空白のまま入室すると「来場者」として参加できます</span>', placeholder: 'あなたの名前（任意）', enter: '入室する', writePlaceholder: 'メッセージを書いてください…', post: '📌 送る', cancel: 'キャンセル' },
-  en: { welcome: 'Welcome to the Gallery', hint: 'Enter your nickname<br><span style="font-size:11px">Leave blank to join as "Visitor"</span>', placeholder: 'Your name (optional)', enter: 'Enter', writePlaceholder: 'Write your message…', post: '📌 Post', cancel: 'Cancel' },
-  ko: { welcome: '갤러리에 오신 것을 환영합니다', hint: '닉네임을 입력해 주세요<br><span style="font-size:11px">공백으로 두면 "방문자"로 참가합니다</span>', placeholder: '이름 (선택)', enter: '입장', writePlaceholder: '메시지를 입력하세요…', post: '📌 보내기', cancel: '취소' },
-  'zh-tw': { welcome: '歡迎來到畫廊', hint: '請輸入您的暱稱<br><span style="font-size:11px">留空則以「參觀者」身份參加</span>', placeholder: '您的名字（選填）', enter: '進入', writePlaceholder: '請寫下您的留言…', post: '📌 發送', cancel: '取消' },
-  'zh-cn': { welcome: '欢迎来到画廊', hint: '请输入您的昵称<br><span style="font-size:11px">留空则以「参观者」身份参加</span>', placeholder: '您的名字（选填）', enter: '进入', writePlaceholder: '请写下您的留言…', post: '📌 发送', cancel: '取消' },
+  ja: { welcome: 'ギャラリーへようこそ', hint: 'ニックネームを入力してください<br><span style="font-size:11px">空白のまま入室すると「来場者」として参加できます</span>', placeholder: 'あなたの名前（任意）', enter: '入室する', writePlaceholder: 'メッセージを書いてください…', post: '📌 送る', cancel: 'キャンセル', writeBtn: '✏️ メッセージを書く' },
+  en: { welcome: 'Welcome to the Gallery', hint: 'Enter your nickname<br><span style="font-size:11px">Leave blank to join as "Visitor"</span>', placeholder: 'Your name (optional)', enter: 'Enter', writePlaceholder: 'Write your message…', post: '📌 Post', cancel: 'Cancel', writeBtn: '✏️ Write a message' },
+  ko: { welcome: '갤러리에 오신 것을 환영합니다', hint: '닉네임을 입력해 주세요<br><span style="font-size:11px">공백으로 두면 "방문자"로 참가합니다</span>', placeholder: '이름 (선택)', enter: '입장', writePlaceholder: '메시지를 입력하세요…', post: '📌 보내기', cancel: '취소', writeBtn: '✏️ 메시지 쓰기' },
+  'zh-tw': { welcome: '歡迎來到畫廊', hint: '請輸入您的暱稱<br><span style="font-size:11px">留空則以「參觀者」身份參加</span>', placeholder: '您的名字（選填）', enter: '進入', writePlaceholder: '請寫下您的留言…', post: '📌 發送', cancel: '取消', writeBtn: '✏️ 寫留言' },
+  'zh-cn': { welcome: '欢迎来到画廊', hint: '请输入您的昵称<br><span style="font-size:11px">留空则以「参观者」身份参加</span>', placeholder: '您的名字（选填）', enter: '进入', writePlaceholder: '请写下您的留言…', post: '📌 发送', cancel: '取消', writeBtn: '✏️ 写留言' },
 };
 
 function applyUILang() {
@@ -355,6 +355,7 @@ function applyUILang() {
   el = document.getElementById('write-textarea');   if (el) el.placeholder = t.writePlaceholder;
   el = document.getElementById('post-btn');         if (el) el.textContent = t.post;
   el = document.getElementById('ui-cancel-btn');    if (el) el.textContent = t.cancel;
+  el = document.getElementById('write-btn');         if (el) el.textContent = t.writeBtn || '✏️ メッセージを書く';
 }
 
 // ── メッセージ翻訳 ────────────────────────────────────────
@@ -501,7 +502,7 @@ function renderNotes(messages) {
     el.style.background = isHidden ? "#ddd" : color.bg;
     el.style.border     = `1px solid ${isHidden ? "#bbb" : color.border}`;
     el.style.transform  = `rotate(${tilt}deg)`;
-    const sparkles = isExhibMsg && !isHidden ? `<span class="sparkle" style="top:18px;left:8px;animation-delay:0s">✦</span><span class="sparkle" style="top:22px;right:8px;animation-delay:0.7s">✧</span><span class="sparkle" style="bottom:18px;left:12px;animation-delay:1.3s">✦</span><span class="sparkle" style="bottom:14px;right:10px;animation-delay:0.4s">✧</span>` : "";
+    const sparkles = isExhibMsg && !isHidden ? `<span class="sparkle" style="top:14px;left:6px;animation-delay:0s">✦</span><span class="sparkle" style="top:16px;right:6px;animation-delay:0.5s">✧</span><span class="sparkle" style="bottom:14px;left:8px;animation-delay:1.0s">★</span><span class="sparkle" style="bottom:12px;right:8px;animation-delay:0.3s">✦</span><span class="sparkle" style="top:50%;left:4px;animation-delay:0.8s">✧</span><span class="sparkle" style="top:50%;right:4px;animation-delay:1.4s">★</span>` : "";
     const pinHtml = isHidden ? `<div class="pin pin-hidden"></div>` : isExhibMsg ? `<div class="pin-exhibitor-star">⭐</div>` : `<div class="pin pin-visitor"></div>`;
     const ribbonHtml = isExhibMsg && !isHidden ? `<div class="sticky-exhibitor-ribbon"></div>` : "";
     const displayText = currentLang && translationCache[msg.id] && translationCache[msg.id][currentLang] ? translationCache[msg.id][currentLang] : msg.text;
