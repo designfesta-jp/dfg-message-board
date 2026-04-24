@@ -412,7 +412,7 @@
       </div>
       <div class="btn-row">
         <button class="btn btn-primary btn-sm" onclick="renderQRList()">🔄 QRコードを更新</button>
-        <button class="btn btn-ghost btn-sm" id="print-btn" onclick="doPrint()">🖨 印刷</button>
+        <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨 印刷</button>
       </div>
     </div>
     <div id="qr-list-area"></div>
@@ -612,7 +612,7 @@ function loadSpaces() {
       updateSelects();
       resolve();
       // QRタブが開いている場合は印刷中でなければ更新
-      if (document.getElementById('tab-qr').classList.contains('active') && !window._printing) {
+      if (document.getElementById('tab-qr').classList.contains('active')) {
         renderQRList();
       }
     });
@@ -1198,49 +1198,6 @@ window.renderQRList = function() {
 
 // ── 印刷ボタン：押したときだけ印刷用シートを生成してprint() ──
 
-
-// ── 印刷（別ウィンドウで開いてprint） ──────────────────────
-window.doPrint = function() {
-  const baseUrl = document.getElementById('base-url-input').value.trim();
-  const activeSpaces = spaces.filter(sp => sp.active !== false);
-
-  let sheetsHtml = '';
-  for (let i = 0; i < activeSpaces.length; i += 2) {
-    const sp1 = activeSpaces[i];
-    const sp2 = activeSpaces[i + 1];
-    const url1 = baseUrl + '?space=' + sp1.id;
-    const url2 = sp2 ? baseUrl + '?space=' + sp2.id : null;
-    const isLast = i + 2 >= activeSpaces.length;
-    sheetsHtml += '<div style="width:297mm;height:210mm;display:flex;flex-direction:row;' + (isLast ? '' : 'page-break-after:always;') + '">';
-    sheetsHtml += makePrintHalf(sp1, url1, i * 13);
-    if (sp2) {
-      sheetsHtml += '<div style="width:0.5px;height:210mm;background:#c0a870;flex-shrink:0;"></div>';
-      sheetsHtml += makePrintHalf(sp2, url2, i * 13 + 7);
-    }
-    sheetsHtml += '</div>';
-  }
-
-  const qrScripts = activeSpaces.map(function(sp, i) {
-    const url = baseUrl + '?space=' + sp.id;
-    return 'new QRCode(document.getElementById("qr-' + sp.id + '"),{text:"' + url + '",width:140,height:140,colorDark:"#2c2416",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.M});';
-  }).join('\n');
-
-  const printHtml = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
-    + '<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>'
-    + '<style>*{box-sizing:border-box;margin:0;padding:0;}'
-    + '@page{size:A4 landscape;margin:0;}'
-    + '@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}'
-    + '<\/style></head><body>'
-    + sheetsHtml
-    + '<script>window.onload=function(){'
-    + qrScripts
-    + 'setTimeout(function(){window.print();setTimeout(function(){window.close();},500);},1500);};'
-    + '<\/script></body></html>';
-
-  const w = window.open('', '_blank', 'width=900,height=700');
-  if (w) { w.document.write(printHtml); w.document.close(); }
-  else { alert('ポップアップがブロックされています。許可してください。'); }
-};
 
 function makePrintHalf(sp, url, seed) {
   const notes = generateNotes(seed, 74, 118, 55, 60);

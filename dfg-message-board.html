@@ -669,7 +669,16 @@ function detectSnsType(url) {
 // ═══════════════════════════════════════════════
 //  言語切り替え・翻訳
 // ═══════════════════════════════════════════════
-let currentLang = 'ja';
+// ブラウザ言語を自動検出
+function detectBrowserLang() {
+  const lang = (navigator.language || navigator.userLanguage || 'ja').toLowerCase();
+  if (lang.startsWith('ko')) return 'ko';
+  if (lang.startsWith('zh-tw') || lang.startsWith('zh-hant')) return 'zh-tw';
+  if (lang.startsWith('zh')) return 'zh-cn';
+  if (lang.startsWith('en')) return 'en';
+  return 'ja';
+}
+let currentLang = detectBrowserLang();
 let translationCache = {}; // {msgId: {lang: translatedText}}
 let allMessages = [];
 
@@ -686,6 +695,20 @@ document.addEventListener('click', e => {
   }
 });
 
+// プレースホルダーテキスト
+var PLACEHOLDERS = {
+  'ja': 'メッセージを書いてください…',
+  'en': 'Write your message…',
+  'ko': '메시지를 입력하세요…',
+  'zh-tw': '請寫下您的留言…',
+  'zh-cn': '请写下您的留言…',
+};
+
+function updatePlaceholder() {
+  var el = document.getElementById('write-textarea');
+  if (el) el.placeholder = PLACEHOLDERS[currentLang] || PLACEHOLDERS['ja'];
+}
+
 window.selectLang = async function(lang) {
   document.getElementById('lang-menu').style.display = 'none';
   document.querySelectorAll('.lang-item').forEach(function(b) {
@@ -693,6 +716,7 @@ window.selectLang = async function(lang) {
   });
   if (lang === currentLang) return;
   currentLang = lang;
+  updatePlaceholder();
   if (lang === 'ja') { renderNotes(allMessages); return; }
   var toTranslate = allMessages.filter(function(m) {
     return !m.hidden && !m.deleted && m.text &&
@@ -826,6 +850,12 @@ async function init() {
 
   // ニックネームモーダルを開く
   document.getElementById("nickname-input").focus();
+
+  // 初期言語をLangメニューに反映してプレースホルダーを設定
+  document.querySelectorAll('.lang-item').forEach(function(b) {
+    b.classList.toggle('active-lang', b.dataset.lang === currentLang);
+  });
+  updatePlaceholder();
 
   // メッセージのリアルタイム購読
   const msgsRef = query(
