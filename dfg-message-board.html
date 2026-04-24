@@ -466,7 +466,8 @@
     <div style="position:relative;">
       <button id="lang-btn" onclick="toggleLangMenu()" style="background:rgba(196,160,130,0.9);color:#2c2416;border:none;border-radius:20px;padding:14px 14px;font-size:14px;cursor:pointer;box-shadow:0 4px 20px rgba(139,111,71,0.5);">🌐</button>
       <div id="lang-menu" style="display:none;position:absolute;bottom:54px;right:0;background:#fff;border:1px solid #e0d5c3;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.15);min-width:120px;">
-        <button class="lang-item active-lang" data-lang="ja" onclick="selectLang('ja')">日</button>
+        <button class="lang-item active-lang" data-lang="" onclick="selectLang('')">原文</button>
+        <button class="lang-item" data-lang="ja" onclick="selectLang('ja')">日</button>
         <button class="lang-item" data-lang="en" onclick="selectLang('en')">EN</button>
         <button class="lang-item" data-lang="ko" onclick="selectLang('ko')">한</button>
         <button class="lang-item" data-lang="zh-tw" onclick="selectLang('zh-tw')">中繁</button>
@@ -669,16 +670,17 @@ function detectSnsType(url) {
 // ═══════════════════════════════════════════════
 //  言語切り替え・翻訳
 // ═══════════════════════════════════════════════
-// ブラウザ言語を自動検出
+// ブラウザ言語を自動検出（UIのプレースホルダー用）
 function detectBrowserLang() {
-  const lang = (navigator.language || navigator.userLanguage || 'ja').toLowerCase();
+  var lang = (navigator.language || navigator.userLanguage || 'ja').toLowerCase();
   if (lang.startsWith('ko')) return 'ko';
   if (lang.startsWith('zh-tw') || lang.startsWith('zh-hant')) return 'zh-tw';
   if (lang.startsWith('zh')) return 'zh-cn';
   if (lang.startsWith('en')) return 'en';
   return 'ja';
 }
-let currentLang = detectBrowserLang();
+var browserLang = detectBrowserLang();
+let currentLang = null;
 let translationCache = {}; // {msgId: {lang: translatedText}}
 let allMessages = [];
 
@@ -706,7 +708,7 @@ var PLACEHOLDERS = {
 
 function updatePlaceholder() {
   var el = document.getElementById('write-textarea');
-  if (el) el.placeholder = PLACEHOLDERS[currentLang] || PLACEHOLDERS['ja'];
+  if (el) el.placeholder = PLACEHOLDERS[browserLang] || PLACEHOLDERS['ja'];
 }
 
 window.selectLang = async function(lang) {
@@ -715,7 +717,8 @@ window.selectLang = async function(lang) {
     b.classList.toggle('active-lang', b.dataset.lang === lang);
   });
   if (lang === currentLang) return;
-  currentLang = lang;
+  currentLang = lang || null;
+  if (!currentLang) { renderNotes(allMessages); return; }
   updatePlaceholder();
   if (lang === 'ja') { renderNotes(allMessages); return; }
   var toTranslate = allMessages.filter(function(m) {
@@ -853,7 +856,7 @@ async function init() {
 
   // 初期言語をLangメニューに反映してプレースホルダーを設定
   document.querySelectorAll('.lang-item').forEach(function(b) {
-    b.classList.toggle('active-lang', b.dataset.lang === currentLang);
+    b.classList.toggle('active-lang', b.dataset.lang === '');
   });
   updatePlaceholder();
 
@@ -918,7 +921,7 @@ function renderNotes(messages) {
       ${ribbonHtml}
       ${sparkles}
       ${isHidden ? `<div class="hidden-label">${msg.hiddenBy === "admin" ? "管理者によって非公開" : "非公開"}</div>` : ""}
-      ${!isHidden ? `<p class="sticky-text">${escHtml(currentLang !== 'ja' && translationCache[msg.id]?.[currentLang] ? translationCache[msg.id][currentLang] : msg.text)}</p>` : ""}
+      ${!isHidden ? `<p class="sticky-text">${escHtml(currentLang && translationCache[msg.id]?.[currentLang] ? translationCache[msg.id][currentLang] : msg.text)}</p>` : ""}
       <div class="sticky-footer">
         <span class="sticky-meta">${escHtml(msg.sender || "来場者")} · ${msg.timeStr || ""}</span>
         ${!isHidden && isExhibitor ? `<button class="report-btn" data-id="${msg.id}" onclick="openReport('${msg.id}')">⚑</button>` : ""}
