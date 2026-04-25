@@ -95,12 +95,6 @@ async function loadAndRender() {
       + '</section>';
   }).join('');
 
-    return '<section class="year-section" id="year-' + year + '">'
-      + '<h2 class="year-title" data-count="' + exs.length + '展示を開催">' + year + '</h2>'
-      + cards
-      + '</section>';
-  }).join('');
-
   // 年タブクリック
   document.querySelectorAll('.year-link').forEach(link => {
     link.addEventListener('click', () => {
