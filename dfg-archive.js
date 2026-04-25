@@ -104,6 +104,16 @@ async function loadAndRender() {
       document.querySelectorAll('.year-section').forEach(s => {
         s.style.display = s.id === 'year-' + year ? '' : 'none';
       });
+      // カードのアニメーションを再トリガー
+      setTimeout(function() {
+        document.querySelectorAll('.exhibition-content').forEach(function(card) {
+          card.style.opacity = '0';
+          card.style.animation = '';
+        });
+        setTimeout(function() {
+          if (typeof updateCardVisibilityGlobal === 'function') updateCardVisibilityGlobal();
+        }, 50);
+      }, 10);
     });
   });
 
@@ -141,6 +151,7 @@ function initArchivePage() {
         }
         return 1;
     }
+    window.updateCardVisibilityGlobal = updateCardVisibility;
     function updateCardVisibility() {
         var exhibitions = document.querySelectorAll('.exhibition');
         for (var i = 0; i < exhibitions.length; i++) {
@@ -175,7 +186,6 @@ function initArchivePage() {
         clearTimeout(scrollTimer);
         scrollTimer = setTimeout(function() {
             updateCardVisibility();
-            checkYearInView();
         }, 50);
     });
     var exhibitionContents = document.querySelectorAll('.exhibition-content');
