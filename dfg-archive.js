@@ -120,21 +120,7 @@ loadAndRender().then(() => {
 // Archive Page JavaScript
 function initArchivePage() {
     console.log('Archive page initialization started...');
-    var links = document.querySelectorAll('.year-link');
-    for (var i = 0; i < links.length; i++) {
-        (function(link) {
-            link.addEventListener('click', function(e) {
-                e.preventDefault();
-                var year = link.getAttribute('data-year');
-                var target = document.getElementById('year-' + year);
-                if (target) {
-                    var top = target.offsetTop - 100;
-                    window.scrollTo({ top: top, behavior: 'smooth' });
-                    updateActiveYear(year);
-                }
-            });
-        })(links[i]);
-    }
+    // 年ナビはloadAndRender側で処理するためここでは無効化
     function updateActiveYear(year) {
         var allLinks = document.querySelectorAll('.year-link');
         for (var j = 0; j < allLinks.length; j++) {
@@ -145,16 +131,7 @@ function initArchivePage() {
         }
     }
     function checkYearInView() {
-        var yearSections = document.querySelectorAll('.year-section');
-        var scrollPosition = window.scrollY + 200;
-        for (var i = yearSections.length - 1; i >= 0; i--) {
-            var section = yearSections[i];
-            if (scrollPosition >= section.offsetTop) {
-                var year = section.id.replace('year-', '');
-                updateActiveYear(year);
-                break;
-            }
-        }
+        // display:noneのセクションがあるためスクロールスパイは無効化
     }
     function getNthChildPosition(element) {
         var parent = element.parentElement;
