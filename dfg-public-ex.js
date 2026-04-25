@@ -198,7 +198,7 @@ async function main() {
 
   // jQuery部分の初期化（既存JSと接続）
   if (typeof jQuery !== 'undefined') {
-    initJQuery(years, currentYear, minYear, byYear);
+    initJQuery(jQuery, years, currentYear, minYear, byYear);
   }
 
   console.log('dfg-public-ex: loaded ' + exhibitions.length + ' exhibitions for ' + years.join(', '));
