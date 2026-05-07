@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Gallery Message Board</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --cork: #b87d35; --accent: #c49050;
+      --text: #2c2416; --text-mid: #6b5a42; --text-light: #a08c6e;
+    }
+    body {
+      font-family: 'Noto Serif JP', Georgia, serif;
+      min-height: 100dvh;
+      background: #8b6220;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 24px 16px;
+    }
+    #loading {
+      position: fixed; inset: 0;
+      background: #8b6220;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100; flex-direction: column; gap: 12px;
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading p { color: rgba(255,255,255,0.8); font-size: 14px; }
+
+    .space-label {
+      font-size: 13px; font-weight: 700;
+      color: rgba(255,255,255,0.7);
+      letter-spacing: 2px; text-transform: uppercase;
+      margin-bottom: 16px; text-align: center;
+    }
+
+    /* 自動入室中 */
+    #auto-redirect {
+      text-align: center; color: #fff;
+    }
+    #auto-redirect .title {
+      font-size: 22px; font-weight: 700; margin-bottom: 8px;
+    }
+    #auto-redirect .sub {
+      font-size: 14px; opacity: 0.8; margin-bottom: 24px;
+    }
+    #auto-redirect .progress-bar {
+      width: 200px; height: 4px;
+      background: rgba(255,255,255,0.3);
+      border-radius: 2px; margin: 0 auto;
+      overflow: hidden;
+    }
+    #auto-redirect .progress-fill {
+      height: 100%; background: #fff;
+      animation: progress 1.5s linear forwards;
+    }
+    @keyframes progress { from{width:0} to{width:100%} }
+
+    /* 選択画面 */
+    .select-title {
+      font-size: 18px; font-weight: 700; color: #fff;
+      text-align: center; margin-bottom: 20px;
+    }
+    .exhibition-list {
+      display: flex; flex-direction: column; gap: 12px;
+      width: 100%; max-width: 360px;
+    }
+    .ex-card {
+      background: #FFFDE7;
+      border: 2px solid #FFD54F;
+      border-radius: 8px;
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+      position: relative;
+    }
+    .ex-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.3); }
+    .ex-card.active-ex { border-color: #2e7d52; }
+    .ex-card.readonly-ex { border-color: #FFD54F; opacity: 0.85; }
+    .ex-card.hidden-ex { border-color: #ccc; background: #f5f5f5; opacity: 0.7; }
+    .ex-card-status {
+      font-size: 10px; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase; margin-bottom: 6px;
+    }
+    .status-active { color: #2e7d52; }
+    .status-ended  { color: #8b4513; }
+    .ex-card-name  { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
+    .ex-card-artist{ font-size: 12px; color: var(--text-mid); margin-bottom: 4px; }
+    .ex-card-period{ font-size: 11px; color: var(--text-light); }
+    .ex-card-badge {
+      position: absolute; top: 10px; right: 10px;
+      font-size: 9px; padding: 2px 7px; border-radius: 4px;
+      font-weight: 700; letter-spacing: 0.5px;
+    }
+    .badge-readonly { background: #e8f0fd; color: #3a5fa0; border: 1px solid #b8cef0; }
+    .badge-hidden   { background: #f3f4f6; color: #666; border: 1px solid #ddd; }
+
+    .err-box {
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 8px; padding: 24px;
+      text-align: center; color: #fff;
+      max-width: 320px;
+    }
+    .err-box .icon { font-size: 32px; margin-bottom: 12px; }
+    .err-box .msg  { font-size: 14px; opacity: 0.9; line-height: 1.7; }
+  </style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <p>読み込み中…</p>
+</div>
+
+<div id="content" style="display:none;width:100%;max-width:400px;display:none;align-items:center;flex-direction:column;">
+
+  <div class="space-label" id="space-label"></div>
+
+  <!-- 自動入室中 -->
+  <div id="auto-redirect" style="display:none">
+    <div class="title" id="auto-title"></div>
+    <div class="sub">開催中のメッセージボードへ移動します</div>
+    <div class="progress-bar"><div class="progress-fill"></div></div>
+  </div>
+
+  <!-- 複数選択 -->
+  <div id="select-screen" style="display:none;width:100%">
+    <div class="select-title" id="select-title">メッセージボードを選択</div>
+    <div class="exhibition-list" id="exhibition-list"></div>
+  </div>
+
+  <!-- エラー -->
+  <div id="error-screen" style="display:none">
+    <div class="err-box">
+      <div class="icon">🔍</div>
+      <div class="msg" id="error-msg">スペースが見つかりませんでした</div>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+import { getFirestore, doc, getDoc }
+  from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+const app = initializeApp({
+  apiKey: "AIzaSyAFdBPTqPUwHALpFYxy1L-XgxaFcHJpKrI",
+  authDomain: "dfg-message-board.firebaseapp.com",
+  projectId: "dfg-message-board",
+  storageBucket: "dfg-message-board.firebasestorage.app",
+  messagingSenderId: "257856032842",
+  appId: "1:257856032842:web:07ff7a53077326845f96b3"
+});
+const db = getFirestore(app);
+
+const params   = new URLSearchParams(location.search);
+const SPACE_ID = params.get('space');
+const SHOW_ALL = params.get('showAll') === '1';
+const BOARD_URL = 'https://dfg-message-board.firebaseapp.com/dfg-message-board.html';
+
+// 日付から自動でアクセスレベルを判定（accessOverrideが設定されていればそちら優先）
+function getExhibitionAccess(ex) {
+  if (ex.accessOverride) return ex.accessOverride;
+  if (!ex.endDate) return 'open';
+  const now  = new Date();
+  const end  = new Date(ex.endDate + 'T23:59:59+09:00');
+  const diff = Math.floor((now - end) / (1000 * 60 * 60 * 24));
+  if (diff < 0)   return 'open';
+  if (diff <= 3)  return 'open';
+  if (diff <= 7)  return 'readonly';
+  if (diff <= 10) return 'hidden';
+  return 'closed';
+}
+
+function getExhibitionStatus(ex) {
+  if (!ex.startDate || !ex.endDate) return 'unknown';
+  const now   = new Date();
+  const start = new Date(ex.startDate + 'T00:00:00+09:00');
+  const end   = new Date(ex.endDate   + 'T23:59:59+09:00');
+  if (now < start) return 'upcoming';
+  if (now > end)   return 'ended';
+  return 'active';
+}
+
+function goToBoard(spaceId, exhibitionId) {
+  const url = BOARD_URL + '?space=' + encodeURIComponent(spaceId) + '&ex=' + encodeURIComponent(exhibitionId);
+  location.href = url;
+}
+
+function showError(msg) {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('content').style.display = 'flex';
+  document.getElementById('error-screen').style.display = 'block';
+  document.getElementById('error-msg').textContent = msg;
+}
+
+async function init() {
+  if (!SPACE_ID) { showError('スペースIDが指定されていません'); return; }
+
+  const snap = await getDoc(doc(db, 'spaces', SPACE_ID));
+  if (!snap.exists()) { showError('スペースが見つかりませんでした'); return; }
+
+  const spaceData = snap.data();
+  const exhibitions = spaceData.exhibitions || [];
+
+  document.getElementById('space-label').textContent = spaceData.spaceNumber || SPACE_ID;
+
+  // URLに展示IDが直接指定されている場合（個別QR）
+  const directEx = params.get('ex');
+  if (directEx) {
+    const ex = exhibitions.find(e => e.id === directEx);
+    if (ex && getExhibitionAccess(ex) !== 'closed') {
+      goToBoard(SPACE_ID, directEx);
+      return;
+    }
+  }
+
+  // access: closed / hidden は除外、visible な展示のみ
+  const visibleExs = exhibitions.filter(ex => getExhibitionAccess(ex) !== 'closed');
+
+  if (visibleExs.length === 0) {
+    showError('現在表示できる展示がありません');
+    return;
+  }
+
+  // 開催中の展示を抽出
+  const activeExs = visibleExs.filter(ex => getExhibitionStatus(ex) === 'active');
+
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('content').style.display = 'flex';
+
+  // 開催中が1件 かつ showAll=1 でない → 自動入室
+  if (activeExs.length === 1 && !SHOW_ALL) {
+    const ex = activeExs[0];
+    document.getElementById('auto-redirect').style.display = 'block';
+    document.getElementById('auto-title').textContent = ex.name || '開催中の展示';
+    setTimeout(() => goToBoard(SPACE_ID, ex.id), 1800);
+    return;
+  }
+
+  // 開催中が複数 or 0件 → 選択画面
+  const title = activeExs.length > 1
+    ? '開催中の展示が複数あります'
+    : SHOW_ALL
+      ? 'メッセージボードを選択'
+      : '過去の展示一覧';
+  document.getElementById('select-title').textContent = title;
+  document.getElementById('select-screen').style.display = 'block';
+
+  // 表示順：開催中→今後→終了（新しい順）
+  const sorted = [...visibleExs].sort((a, b) => {
+    const order = { active: 0, upcoming: 1, ended: 2, unknown: 3 };
+    const sa = order[getExhibitionStatus(a)];
+    const sb = order[getExhibitionStatus(b)];
+    if (sa !== sb) return sa - sb;
+    return (b.startDate || '') > (a.startDate || '') ? 1 : -1;
+  });
+
+  const list = document.getElementById('exhibition-list');
+  list.innerHTML = sorted.map(ex => {
+    const status = getExhibitionStatus(ex);
+    const access = getExhibitionAccess(ex);
+    const isHidden = access === 'hidden';
+    const isReadonly = access === 'readonly';
+    const statusLabel = status === 'active' ? '開催中' : status === 'upcoming' ? '開催予定' : '終了';
+    const statusClass = status === 'active' ? 'status-active' : 'status-ended';
+    const cardClass = status === 'active' ? 'active-ex' : isHidden ? 'hidden-ex' : 'readonly-ex';
+    const badgeHtml = isReadonly
+      ? '<span class="ex-card-badge badge-readonly">閲覧のみ</span>'
+      : isHidden ? '<span class="ex-card-badge badge-hidden">入室不可</span>' : '';
+    const clickable = !isHidden;
+    return '<div class="ex-card ' + cardClass + '" '
+      + (clickable ? 'onclick="enterExhibition(\'' + ex.id + '\')"' : '')
+      + ' style="' + (!clickable ? 'cursor:default;' : '') + '">'
+      + badgeHtml
+      + '<div class="ex-card-status ' + statusClass + '">' + statusLabel + '</div>'
+      + '<div class="ex-card-name">' + escHtml(ex.name || '—') + '</div>'
+      + '<div class="ex-card-artist">' + escHtml(ex.artist || '') + '</div>'
+      + '<div class="ex-card-period">' + escHtml(ex.period || '') + '</div>'
+      + '</div>';
+  }).join('');
+
+  window.enterExhibition = function(exId) {
+    goToBoard(SPACE_ID, exId);
+  };
+}
+
+function escHtml(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+init().catch(e => {
+  console.error(e);
+  showError('読み込みに失敗しました。ページを再読み込みしてください。');
+});
+</script>
+</body>
+</html>

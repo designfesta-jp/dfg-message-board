@@ -356,6 +356,7 @@
         <button class="btn btn-ghost btn-sm" onclick="bulkSetMaxLength()">全スペースに適用</button>
       </div>
       <button class="btn btn-primary btn-sm" onclick="addNewSpace()">＋ 新しいスペースを追加</button>
+      <button class="btn btn-ghost btn-sm" onclick="bulkParseDates()" style="margin-left:8px;">📅 会期から日付を一括更新</button>
     </div>
   </div>
 
@@ -392,13 +393,17 @@
   <!-- ── タブ: メッセージ管理 ── -->
   <div class="tab-content" id="tab-messages">
     <div class="card">
-      <div class="card-title">スペースを選択</div>
-      <div class="space-select-row">
-        <select class="field" id="msg-space-select" onchange="loadMessages()">
-          <option value="">-- スペースを選択 --</option>
-        </select>
+      <div class="card-title">エリアを選択</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;" id="msg-area-tabs"></div>
+      <div id="msg-space-list"><div class="empty-state">上のエリアを選択してください</div></div>
+    </div>
+    <div class="card" id="msg-list-card" style="display:none">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+        <button class="btn btn-ghost btn-sm" onclick="closeMsgList()">← 戻る</button>
+        <div id="msg-list-title" style="font-size:13px;font-weight:700;color:var(--accent);flex:1"></div>
+        <button class="btn btn-ghost btn-sm" onclick="loadMessages(window._currentSpaceId, window._currentExId)">🔄 更新</button>
       </div>
-      <div id="messages-list"><div class="empty-state">スペースを選択してください</div></div>
+      <div id="messages-list"><div class="empty-state">読み込み中…</div></div>
     </div>
   </div>
 
@@ -408,7 +413,7 @@
       <div class="card-title">設定</div>
       <div class="field-row">
         <label class="field-label">チャットページのベースURL</label>
-        <input class="field" id="base-url-input" value="https://designfesta-jp.github.io/dfg-message-board/dfg-message-board.html" />
+        <input class="field" id="base-url-input" value="https://dfg-message-board.firebaseapp.com/dfg-landing.html" />
       </div>
       <div class="btn-row">
         <button class="btn btn-primary btn-sm" onclick="renderQRList()">🔄 QRコードを更新</button>
@@ -628,9 +633,8 @@ function renderSpaces() {
       <div class="space-card-header" onclick="toggleSpaceCard(${idx})">
         <div class="${sp.active !== false ? 'active-dot' : 'inactive-dot'}"></div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:2px">${escHtml(sp.spaceNumber || '（スペース名なし）')}</div>
-          <div class="space-card-name">${escHtml(sp.name || '（タイトルなし）')}</div>
-          <div class="space-card-artist">${escHtml(sp.artist || '')}</div>
+          <div class="space-card-name">${escHtml(sp.spaceNumber || '（スペース名なし）')}</div>
+          <div style="font-size:11px;color:var(--text-light);">展示数: ${(sp.exhibitions || []).length}件</div>
         </div>
         <button class="btn btn-danger btn-sm" style="flex-shrink:0;margin-right:6px;"
           onclick="event.stopPropagation();deleteSpace(${idx})">🗑</button>
@@ -643,9 +647,7 @@ function renderSpaces() {
           <div style="font-size:11px;color:#a08c6e;margin-bottom:6px;letter-spacing:1px;">📌 プロフィール付箋のプレビュー</div>
           <div id="sp-preview-spacenum-${idx}" style="font-size:12px;color:#8b6f47;font-weight:700;margin-bottom:2px">${escHtml(sp.spaceNumber || '')}</div>
           <div id="sp-preview-booth-${idx}" style="font-size:11px;color:#a08c6e;margin-bottom:2px;display:${sp.booth ? 'block' : 'none'}">${escHtml(sp.booth || '')}</div>
-          <div id="sp-preview-name-${idx}" style="font-size:16px;font-weight:700;color:#2c2416;margin-bottom:3px">${escHtml(sp.name || '（タイトルなし）')}</div>
-          <div id="sp-preview-artist-${idx}" style="font-size:12px;color:#6b5a42;margin-bottom:2px">${escHtml(sp.artist || '')}</div>
-          <div id="sp-preview-period-${idx}" style="font-size:11px;color:#a08c6e">${escHtml(sp.period || '')}</div>
+          <div style="font-size:13px;color:#6b5a42;">展示数: ${(sp.exhibitions || []).length}件</div>
         </div>
 
         <div class="field-row">
@@ -662,48 +664,7 @@ function renderSpaces() {
           <input class="field" id="sp-booth-${idx}" value="${escHtml(sp.booth || '')}" placeholder="例: ブースB"
             oninput="updatePreview(${idx})" />
         </div>
-        <div class="field-row">
-          <label class="field-label">展示タイトル</label>
-          <input class="field" id="sp-name-${idx}" value="${escHtml(sp.name || '')}"
-            oninput="updatePreview(${idx})" />
-        </div>
-        <div class="field-row">
-          <label class="field-label">アーティスト名</label>
-          <input class="field" id="sp-artist-${idx}" value="${escHtml(sp.artist || '')}"
-            oninput="updatePreview(${idx})" />
-        </div>
-        <div class="field-row">
-          <label class="field-label">会期</label>
-          <input class="field" id="sp-period-${idx}" value="${escHtml(sp.period || '')}"
-            oninput="updatePreview(${idx})" />
-        </div>
-        <div class="field-row">
-          <label class="field-label">出展者パスワード</label>
-          <input class="field" id="sp-pw-${idx}" value="${escHtml(sp.exhibitorPassword || '')}" placeholder="パスワードを設定（4文字以上推奨）" />
-        </div>
-        <div class="field-row">
-          <label class="field-label">SNSリンク</label>
-          <div id="sp-sns-${idx}" style="margin-bottom:6px">
-            ${(sp.sns || []).map((s, si) => `
-              <span class="sns-tag">
-                ${escHtml(s.label || s.url)}
-                <button class="sns-remove" onclick="removeSns(${idx},${si})">×</button>
-              </span>
-            `).join('')}
-          </div>
-          <div style="display:flex;gap:6px">
-            <input class="field" id="sp-sns-input-${idx}" placeholder="https://..." style="flex:1" />
-            <button class="btn btn-ghost btn-sm" onclick="addSns(${idx})">追加</button>
-          </div>
-        </div>
-        <div class="field-row">
-          <label class="field-label">文字数制限（付箋1枚あたり）</label>
-          <div style="display:flex;align-items:center;gap:8px">
-            <input class="field" id="sp-maxlen-${idx}" type="number" min="10" max="1000"
-              value="${sp.maxLength || 200}" style="width:100px" />
-            <span style="font-size:12px;color:var(--text-light)">文字（デフォルト: 200）</span>
-          </div>
-        </div>
+
         <div class="field-row">
           <label class="field-label">公開設定</label>
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
@@ -711,7 +672,15 @@ function renderSpaces() {
             公開中（チェックを外すと来場者に表示されません）
           </label>
         </div>
-        <div class="btn-row">
+
+        <hr>
+        <div class="card-title" style="margin-bottom:10px;">📅 展示一覧</div>
+        <div id="sp-exhibitions-${idx}">
+          ${renderExhibitions(sp, idx)}
+        </div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="addExhibition(${idx})">＋ 展示を追加</button>
+
+        <div class="btn-row" style="margin-top:14px">
           <button class="btn btn-primary btn-sm" onclick="saveSpace(${idx})">💾 保存</button>
           <button class="btn btn-danger btn-sm" onclick="deleteSpace(${idx})">🗑 削除</button>
         </div>
@@ -767,16 +736,26 @@ window.saveSpace = async function(idx) {
   const saveBtn = document.querySelector(`#sp-body-${idx} .btn-primary`);
   if (saveBtn) { saveBtn.textContent = '保存中…'; saveBtn.disabled = true; }
   try {
+    // exhibitions配列をフォームから収集
+    const exCount = (spaces[idx].exhibitions || []).length;
+    const updatedExhibitions = (spaces[idx].exhibitions || []).map((ex, ei) => ({
+      id:                ex.id,
+      name:              (document.getElementById('ex-name-'   + idx + '-' + ei)?.value   || '').trim(),
+      artist:            (document.getElementById('ex-artist-' + idx + '-' + ei)?.value   || '').trim(),
+      period:            (document.getElementById('ex-period-' + idx + '-' + ei)?.value   || '').trim(),
+      startDate:         (document.getElementById('ex-start-'  + idx + '-' + ei)?.value   || '').trim(),
+      endDate:           (document.getElementById('ex-end-'    + idx + '-' + ei)?.value   || '').trim(),
+      exhibitorPassword: (document.getElementById('ex-pw-'     + idx + '-' + ei)?.value   || '').trim(),
+      maxLength:         parseInt(document.getElementById('ex-maxlen-' + idx + '-' + ei)?.value) || 200,
+      access:            document.getElementById('ex-access-'  + idx + '-' + ei)?.value   || 'open',
+      sns:               ex.sns || [],
+    }));
+
     const updated = {
-      name: document.getElementById('sp-name-' + idx).value.trim(),
-      artist: document.getElementById('sp-artist-' + idx).value.trim(),
-      period: document.getElementById('sp-period-' + idx).value.trim(),
       spaceNumber: document.getElementById('sp-spacenum-' + idx).value.trim(),
       booth: document.getElementById('sp-booth-' + idx).value.trim(),
-      maxLength: parseInt(document.getElementById('sp-maxlen-' + idx).value) || 200,
-      exhibitorPassword: document.getElementById('sp-pw-' + idx).value.trim(),
-      sns: sp.sns || [],
       active: document.getElementById('sp-active-' + idx).checked,
+      exhibitions: updatedExhibitions,
       updatedAt: serverTimestamp(),
     };
     await setDoc(doc(db, 'spaces', sp.id), updated, { merge: true });
@@ -792,6 +771,135 @@ window.saveSpace = async function(idx) {
   }
 };
 
+// ── 展示一覧HTML生成 ────────────────────────────────────
+function getExAccessAdmin(ex) {
+  if (ex.accessOverride) return ex.accessOverride;
+  if (!ex.endDate) return 'open';
+  const now = new Date();
+  const end = new Date(ex.endDate + 'T23:59:59+09:00');
+  const diff = Math.floor((now - end) / (1000 * 60 * 60 * 24));
+  if (diff <= 3)  return 'open';
+  if (diff <= 7)  return 'readonly';
+  if (diff <= 10) return 'hidden';
+  return 'closed';
+}
+
+function renderExhibitions(sp, idx) {
+  const exs = sp.exhibitions || [];
+  if (exs.length === 0) return '<div style="font-size:12px;color:var(--text-light);padding:8px 0;">展示がありません。「展示を追加」から追加してください。</div>';
+
+  const activeExs = exs.filter(ex => { const a = getExAccessAdmin(ex); return a === 'open' || a === 'readonly'; });
+  const oldExs    = exs.filter(ex => { const a = getExAccessAdmin(ex); return a === 'hidden' || a === 'closed'; });
+  const spUid = (sp.id || '').replace(/[^a-zA-Z0-9]/g, '_');
+
+  function makeExHtml(ex, ei) {
+    const snsHtml = (ex.sns || []).map((s, si) =>
+      '<span class="sns-tag">' + escHtml(s.label || s.url) +
+      '<button class="sns-remove" onclick="removeExSns(' + idx + ',' + ei + ',' + si + ')">×</button></span>'
+    ).join('');
+
+    return '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
+      + '<div style="font-size:12px;font-weight:700;color:var(--accent)">展示 ' + (ei+1) + '</div>'
+      + '<button class="btn btn-danger btn-sm" onclick="removeExhibition(' + idx + ',' + ei + ')">🗑</button>'
+      + '</div>'
+      + '<div class="field-row"><label class="field-label">展示ID（変更不可）</label>'
+      + '<input class="field" value="' + escHtml(ex.id || '') + '" disabled style="opacity:0.5;font-size:11px" /></div>'
+      + '<div class="field-row"><label class="field-label">展示タイトル</label>'
+      + '<input class="field" id="ex-name-' + idx + '-' + ei + '" value="' + escHtml(ex.name || '') + '" /></div>'
+      + '<div class="field-row"><label class="field-label">アーティスト名</label>'
+      + '<input class="field" id="ex-artist-' + idx + '-' + ei + '" value="' + escHtml(ex.artist || '') + '" /></div>'
+      + '<div class="field-row"><label class="field-label">会期（表示用）</label>'
+      + '<input class="field" id="ex-period-' + idx + '-' + ei + '" value="' + escHtml(ex.period || '') + '" placeholder="例: 2026年4月1日〜4月30日" /></div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">'
+      + '<div class="field-row" style="margin:0"><label class="field-label">開始日</label>'
+      + '<input class="field" type="date" id="ex-start-' + idx + '-' + ei + '" value="' + escHtml(ex.startDate || '') + '" /></div>'
+      + '<div class="field-row" style="margin:0"><label class="field-label">終了日</label>'
+      + '<input class="field" type="date" id="ex-end-' + idx + '-' + ei + '" value="' + escHtml(ex.endDate || '') + '" /></div>'
+      + '</div>'
+      + '<div class="field-row"><label class="field-label">出展者パスワード</label>'
+      + '<input class="field" id="ex-pw-' + idx + '-' + ei + '" value="' + escHtml(ex.exhibitorPassword || '') + '" placeholder="4文字以上推奨" /></div>'
+      + '<div class="field-row"><label class="field-label">文字数制限</label>'
+      + '<div style="display:flex;align-items:center;gap:8px">'
+      + '<input class="field" type="number" id="ex-maxlen-' + idx + '-' + ei + '" min="10" max="1000" value="' + (ex.maxLength || 200) + '" style="width:100px" />'
+      + '<span style="font-size:12px;color:var(--text-light)">文字</span></div></div>'
+      + '<div class="field-row"><label class="field-label">アクセス制限（手動上書き）</label>'
+      + '<select class="field" id="ex-access-' + idx + '-' + ei + '">'
+      + '<option value="" ' + (!ex.accessOverride ? 'selected' : '') + '>自動判定（日付から計算）</option>'
+      + '<option value="open" '     + (ex.accessOverride === 'open'     ? 'selected' : '') + '>open — 誰でも入室・書き込み可</option>'
+      + '<option value="readonly" ' + (ex.accessOverride === 'readonly' ? 'selected' : '') + '>readonly — 入室可・書き込み不可</option>'
+      + '<option value="hidden" '   + (ex.accessOverride === 'hidden'   ? 'selected' : '') + '>hidden — 一覧には出るが入室不可</option>'
+      + '<option value="closed" '   + (ex.accessOverride === 'closed'   ? 'selected' : '') + '>closed — 一覧にも表示しない</option>'
+      + '</select></div>'
+      + '<div class="field-row"><label class="field-label">SNSリンク</label>'
+      + '<div id="ex-sns-' + idx + '-' + ei + '" style="margin-bottom:6px">' + snsHtml + '</div>'
+      + '<div style="display:flex;gap:6px">'
+      + '<input class="field" id="ex-sns-input-' + idx + '-' + ei + '" placeholder="https://..." style="flex:1" />'
+      + '<button class="btn btn-ghost btn-sm" onclick="addExSns(' + idx + ',' + ei + ')">追加</button>'
+      + '</div></div>'
+      + '</div>';
+  }
+
+  const activeHtml = activeExs.length > 0
+    ? activeExs.map((ex, ei) => makeExHtml(ex, ei)).join('')
+    : '<div style="font-size:12px;color:var(--text-light);padding:8px 0;">現在公開中の展示はありません</div>';
+
+  const oldHtml = oldExs.length > 0
+    ? '<div style="margin-top:8px;">'
+      + '<button class="btn btn-ghost btn-sm" onclick="toggleOldExsAdmin(\'' + spUid + '\')" style="width:100%;font-size:11px;">過去の展示 (' + oldExs.length + '件) を表示/非表示</button>'
+      + '<div id="old-exs-admin-' + spUid + '" style="display:none;">'
+      + oldExs.map((ex, ei) => makeExHtml(ex, activeExs.length + ei)).join('')
+      + '</div></div>'
+    : '';
+
+  return activeHtml + oldHtml;
+}
+
+window.toggleOldExsAdmin = function(spUid) {
+  const el = document.getElementById('old-exs-admin-' + spUid);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+};
+
+window.addExhibition = function(idx) {
+  if (!spaces[idx].exhibitions) spaces[idx].exhibitions = [];
+  const newId = 'ex-' + Date.now();
+  spaces[idx].exhibitions.push({
+    id: newId, name: '', artist: '', period: '',
+    startDate: '', endDate: '', exhibitorPassword: '',
+    maxLength: 200, access: 'open', sns: []
+  });
+  const container = document.getElementById('sp-exhibitions-' + idx);
+  if (container) container.innerHTML = renderExhibitions(spaces[idx], idx);
+};
+
+window.removeExhibition = function(idx, ei) {
+  if (!confirm('この展示を削除しますか？\n（メッセージは削除されません）')) return;
+  spaces[idx].exhibitions.splice(ei, 1);
+  const container = document.getElementById('sp-exhibitions-' + idx);
+  if (container) container.innerHTML = renderExhibitions(spaces[idx], idx);
+};
+
+window.addExSns = function(idx, ei) {
+  const input = document.getElementById('ex-sns-input-' + idx + '-' + ei);
+  const url = input.value.trim();
+  if (!url || !/^https?:\/\//.test(url)) { showToast('URLはhttps://で始まる必要があります'); return; }
+  if (!spaces[idx].exhibitions[ei].sns) spaces[idx].exhibitions[ei].sns = [];
+  const type = detectSnsType(url);
+  const label = url.replace(/^https?:\/\//, '').replace(/\/$/, '').split('/').slice(0,2).join('/');
+  spaces[idx].exhibitions[ei].sns.push({ type, url, label });
+  input.value = '';
+  const container = document.getElementById('sp-exhibitions-' + idx);
+  if (container) container.innerHTML = renderExhibitions(spaces[idx], idx);
+  document.getElementById('sp-body-' + idx).classList.add('open');
+};
+
+window.removeExSns = function(idx, ei, si) {
+  spaces[idx].exhibitions[ei].sns.splice(si, 1);
+  const container = document.getElementById('sp-exhibitions-' + idx);
+  if (container) container.innerHTML = renderExhibitions(spaces[idx], idx);
+  document.getElementById('sp-body-' + idx).classList.add('open');
+};
+
 window.addNewSpace = function() {
   const id = prompt('新しいスペースIDを入力してください\n例: space-5\n\n※保存ボタンを押すまでFirestoreには登録されません');
   if (!id || !id.trim()) return;
@@ -803,6 +911,63 @@ window.addNewSpace = function() {
   const idx = spaces.length - 1;
   document.getElementById('sp-body-' + idx).classList.add('open');
   showToast('入力後に「💾 保存」を押してください');
+};
+
+window.bulkParseDates = async function() {
+  if (!confirm('全スペースの展示データに対して会期テキストから開始日・終了日を自動設定します。既存の日付は上書きされます。続けますか？')) return;
+  
+  function parsePeriodDates(periodStr) {
+    if (!periodStr) return { startDate: '', endDate: '' };
+    // 年付きの日付を全て抽出
+    const fullDates = periodStr.match(/\d{4}[^\d]\d{1,2}[^\d]\d{1,2}/g);
+    if (!fullDates) return { startDate: '', endDate: '' };
+    const parseDate = (str) => {
+      const m = str.match(/(\d{4})[^\d](\d{1,2})[^\d](\d{1,2})/);
+      if (!m) return '';
+      return m[1] + '-' + String(m[2]).padStart(2,'0') + '-' + String(m[3]).padStart(2,'0');
+    };
+    const startDate = parseDate(fullDates[0]);
+    let endDate = '';
+    if (fullDates[1]) {
+      endDate = parseDate(fullDates[1]);
+    } else {
+      // 終了日に年なしのパターン（例: 2026/05/06 - 05/12）
+      const startYear = fullDates[0].match(/(\d{4})/)?.[1] || '';
+      const endM = periodStr.match(/[-〜~]\s*(\d{1,2})[^\d](\d{1,2})(?!\d)/);
+      if (endM && startYear) {
+        endDate = startYear + '-' + String(endM[1]).padStart(2,'0') + '-' + String(endM[2]).padStart(2,'0');
+      }
+    }
+    return { startDate, endDate };
+  }
+
+  let updated = 0, skipped = 0;
+  try {
+    for (const sp of spaces) {
+      const exs = sp.exhibitions || [];
+      if (exs.length === 0) continue;
+      let changed = false;
+      const newExs = exs.map(ex => {
+        if (ex.startDate && ex.endDate) { skipped++; return ex; }
+        const { startDate, endDate } = parsePeriodDates(ex.period || '');
+        if (startDate || endDate) {
+          changed = true;
+          updated++;
+          return { ...ex, startDate, endDate };
+        }
+        skipped++;
+        return ex;
+      });
+      if (changed) {
+        await setDoc(doc(db, 'spaces', sp.id), { exhibitions: newExs }, { merge: true });
+      }
+    }
+    showToast('✓ ' + updated + '件を更新、' + skipped + '件をスキップしました');
+    await loadSpaces();
+  } catch(e) {
+    console.error(e);
+    showToast('更新に失敗しました: ' + e.message);
+  }
 };
 
 window.bulkSetMaxLength = async function() {
@@ -875,37 +1040,142 @@ window.checkQueue = async function() {
 
 window.importQueue = async function() {
   if (queueDocs.length === 0) { showToast('キューにデータがありません'); return; }
+  if (queueDocs.length > 1) { showToast('一度に取り込めるのは1件です。先頭の1件を処理します。'); }
+
+  const item = queueDocs[0];
+  const d = parseText(item.raw || '');
+  const snsArr = (d.snsAll && d.snsAll.length > 0 ? d.snsAll : (d.sns ? [d.sns] : []))
+    .map(url => ({ type: detectSnsType(url), url, label: url.replace(/^https?:\/\//, '').replace(/\/$/, '').split('/').slice(0,2).join('/') }));
+  const spaceNumber = [d.space, d.floor].filter(Boolean).join(' ') || d.space || '';
+
+  // スペース選択ダイアログを表示
+  showImportDialog(d, snsArr, spaceNumber, item);
+};
+
+// ── 取り込みダイアログ ────────────────────────────────────
+function showImportDialog(d, snsArr, spaceNumber, queueItem) {
+  // 既存モーダルがあれば削除
+  const existing = document.getElementById('import-dialog');
+  if (existing) existing.remove();
+
+  const spaceOptions = spaces.map(sp =>
+    '<option value="' + sp.id + '">' + escHtml(sp.spaceNumber || sp.id) + ' — ' + escHtml(sp.name || '(空)') + '</option>'
+  ).join('');
+
+  const dialog = document.createElement('div');
+  dialog.id = 'import-dialog';
+  dialog.style.cssText = 'position:fixed;inset:0;background:rgba(44,36,22,0.6);display:flex;align-items:center;justify-content:center;z-index:200;padding:16px;';
+  dialog.innerHTML = '<div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:480px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,0.3);">'
+    + '<div style="font-size:16px;font-weight:700;color:var(--accent);margin-bottom:16px;">🎯 展示を取り込む</div>'
+    + '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;line-height:1.8;">'
+    + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;">' + escHtml(d.title || '（タイトルなし）') + '</div>'
+    + '<div>アーティスト: ' + escHtml(d.artistName || '—') + '</div>'
+    + (d.period ? '<div>会期: ' + escHtml(d.period) + '</div>' : '')
+    + (spaceNumber ? '<div>スペース: ' + escHtml(spaceNumber) + '</div>' : '')
+    + '</div>'
+    + '<div style="margin-bottom:12px;">'
+    + '<label style="font-size:11px;color:var(--text-light);display:block;margin-bottom:4px;">取り込み先スペース</label>'
+    + '<select id="import-space-select" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:#fff;font-family:inherit;">'
+    + '<option value="__new__">＋ 新規スペースとして作成（' + escHtml(spaceNumber) + '）</option>'
+    + spaceOptions
+    + '</select>'
+    + '</div>'
+    + '<div style="display:flex;gap:8px;margin-top:16px;">'
+    + '<button onclick="executeImport(' + "'" + queueItem.id + "'" + ')" style="flex:1;padding:10px;background:var(--green);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">✓ 取り込む</button>'
+    + '<button onclick="closeImportDialog()" style="flex:1;padding:10px;background:transparent;color:var(--text-mid);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;">キャンセル</button>'
+    + '</div>'
+    + '</div>';
+  document.body.appendChild(dialog);
+
+  window.closeImportDialog = function() {
+  const d = document.getElementById('import-dialog');
+  if (d) d.remove();
+};
+
+// ダイアログ外クリックで閉じる
+  dialog.addEventListener('click', function(e) {
+    if (e.target === dialog) dialog.remove();
+  });
+}
+
+window.executeImport = async function(queueItemId) {
+  const select = document.getElementById('import-space-select');
+  const selectedSpaceId = select.value;
+  const item = queueDocs.find(q => q.id === queueItemId);
+  if (!item) { showToast('キューデータが見つかりません'); return; }
+
+  const d = parseText(item.raw || '');
+  const snsArr = (d.snsAll && d.snsAll.length > 0 ? d.snsAll : (d.sns ? [d.sns] : []))
+    .map(url => ({ type: detectSnsType(url), url, label: url.replace(/^https?:\/\//, '').replace(/\/$/, '').split('/').slice(0,2).join('/') }));
+  const spaceNumber = [d.space, d.floor].filter(Boolean).join(' ') || d.space || '';
+
+  // 会期テキストからstartDate/endDateを自動パース
+  function parsePeriodDates(periodStr) {
+    if (!periodStr) return { startDate: '', endDate: '' };
+    // 例: "2026/05/06 - 05/12" or "2026年5月6日〜5月12日" or "2026.05.06-05.12"
+    const full = periodStr.match(/(\d{4})[^\/\d](\d{1,2})[^\/\d](\d{1,2})/g);
+    if (!full) return { startDate: '', endDate: '' };
+    const parseDate = (str) => {
+      const m = str.match(/(\d{4})[^\d](\d{1,2})[^\d](\d{1,2})/);
+      if (!m) return '';
+      return m[1] + '-' + String(m[2]).padStart(2,'0') + '-' + String(m[3]).padStart(2,'0');
+    };
+    const startDate = parseDate(full[0]);
+    // 終了日：年なしの場合は開始年を流用
+    let endDate = '';
+    if (full[1]) {
+      endDate = parseDate(full[1]);
+    } else {
+      // "2026/05/06 - 05/12" パターン：終了日に年なし
+      const startYear = full[0].match(/(\d{4})/)?.[1] || '';
+      const endM = periodStr.match(/[-〜~]\s*(\d{1,2})[^\/\d](\d{1,2})(?!\d)/);
+      if (endM && startYear) {
+        endDate = startYear + '-' + String(endM[1]).padStart(2,'0') + '-' + String(endM[2]).padStart(2,'0');
+      }
+    }
+    return { startDate, endDate };
+  }
+
+  const { startDate, endDate } = parsePeriodDates(d.period || '');
+
+  const newEx = {
+    id: 'ex-' + Date.now(),
+    name: d.title || '',
+    artist: d.artistName || '',
+    period: d.period || '',
+    startDate,
+    endDate,
+    exhibitorPassword: '',
+    maxLength: 200,
+    access: 'open',
+    sns: snsArr,
+  };
 
   try {
-    let count = 0;
-    for (const item of queueDocs) {
-      const d = parseText(item.raw || '');
+    if (selectedSpaceId === '__new__') {
+      // 新規スペース作成
       const spaceId = 'space-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
-      // SNS: 新形式はsnsAllに複数URL、旧形式はd.snsに1つ
-      const snsArr = (d.snsAll && d.snsAll.length > 0 ? d.snsAll : (d.sns ? [d.sns] : []))
-        .map(url => ({ type: detectSnsType(url), url, label: url.replace(/^https?:\/\//, '').replace(/\/$/, '').split('/').slice(0,2).join('/') }));
-      // spaceNumber: space+floorを結合（例: WEST + 2-B → WEST 2-B）
-      const spaceNumber = [d.space, d.floor].filter(Boolean).join(' ') || d.space || '';
-
       await setDoc(doc(db, 'spaces', spaceId), {
-        name: d.title || '',
-        artist: d.artistName || '',
-        period: d.period || '',
-        exhibitorPassword: '',
-        sns: snsArr,
-        active: true,
         spaceNumber: spaceNumber,
-        floor: d.floor || '',
+        active: true,
+        exhibitions: [newEx],
         importedAt: serverTimestamp(),
+      });
+    } else {
+      // 既存スペースのexhibitions先頭に追加
+      const sp = spaces.find(s => s.id === selectedSpaceId);
+      const currentExs = sp ? (sp.exhibitions || []) : [];
+      await setDoc(doc(db, 'spaces', selectedSpaceId), {
+        exhibitions: [newEx, ...currentExs],
       }, { merge: true });
-
-      // 取り込み済みにマーク
-      await updateDoc(doc(db, 'import_queue', item.id), { imported: true });
-      count++;
     }
 
-    queueDocs = [];
-    showToast(`✓ ${count}件を取り込みました`);
+    // 取り込み済みにマーク
+    await updateDoc(doc(db, 'import_queue', queueItemId), { imported: true });
+    queueDocs = queueDocs.filter(q => q.id !== queueItemId);
+
+    document.getElementById('import-dialog')?.remove();
+    showToast('✓ 取り込みました');
     await loadSpaces();
     updateSelects();
     switchTab('tab-spaces');
@@ -974,15 +1244,21 @@ window.markRead = async function(repId) {
 };
 
 // ── メッセージ管理 ────────────────────────────────────────
-window.loadMessages = async function() {
-  const spaceId = document.getElementById('msg-space-select').value;
+window.loadMessages = async function(spaceId, exId) {
   const el = document.getElementById('messages-list');
   if (!spaceId) { el.innerHTML = '<div class="empty-state">スペースを選択してください</div>'; return; }
 
+  window._currentExId = exId || null;
+  window._currentSpaceId = spaceId;
   el.innerHTML = '<div class="empty-state">読み込み中…</div>';
   const q = query(collection(db, 'spaces', spaceId, 'messages'), orderBy('createdAt', 'desc'));
   const snap = await getDocs(q);
-  currentMessages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const allMsgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  // exIdが指定されている場合はその展示のメッセージのみ表示
+  // exhibitionIdがnullの古いメッセージはexIdが一致する場合のみ表示
+  currentMessages = exId
+    ? allMsgs.filter(m => m.exhibitionId === exId || m.exhibitionId === null)
+    : allMsgs;
 
   if (currentMessages.length === 0) { el.innerHTML = '<div class="empty-state">メッセージがありません</div>'; return; }
 
@@ -1007,27 +1283,152 @@ window.loadMessages = async function() {
 window.adminHide = async function(spaceId, msgId) {
   await updateDoc(doc(db, 'spaces', spaceId, 'messages', msgId), { hidden: true, hiddenBy: 'admin' });
   showToast('非公開にしました');
-  loadMessages();
+  loadMessages(spaceId, window._currentExId);
 };
 
 window.adminDelete = async function(spaceId, msgId) {
   if (!confirm('このメッセージを削除しますか？（ログには残ります）')) return;
   await updateDoc(doc(db, 'spaces', spaceId, 'messages', msgId), { deleted: true, hiddenBy: 'admin' });
   showToast('削除しました');
-  loadMessages();
+  loadMessages(spaceId, window._currentExId);
 };
 
 window.adminRestore = async function(spaceId, msgId) {
   await updateDoc(doc(db, 'spaces', spaceId, 'messages', msgId), { hidden: false, deleted: false, hiddenBy: null });
   showToast('復元しました');
-  loadMessages();
+  loadMessages(spaceId, window._currentExId);
 };
 
 // ── セレクト更新 ──────────────────────────────────────────
 function updateSelects() {
-  const opts = spaces.map(sp => `<option value="${sp.id}">${escHtml(sp.name || sp.id)}</option>`).join('');
-  document.getElementById('msg-space-select').innerHTML = '<option value="">-- スペースを選択 --</option>' + opts;
+  renderMsgAreaTabs();
 }
+
+function getAreaFromSpaceNumber(spaceNumber) {
+  if (!spaceNumber) return 'その他';
+  const s = spaceNumber.toUpperCase();
+  if (s.includes('ARTPIECE') && s.includes('WEST')) return 'artpieceWEST';
+  if (s.includes('ARTPIECE') && s.includes('EAST')) return 'artpieceEAST';
+  if (s.includes('WEST')) return 'WEST';
+  if (s.includes('EAST')) return 'EAST';
+  return 'その他';
+}
+
+function renderMsgAreaTabs() {
+  const tabsEl = document.getElementById('msg-area-tabs');
+  if (!tabsEl) return;
+  const areas = [...new Set(spaces.map(sp => getAreaFromSpaceNumber(sp.spaceNumber)))];
+  const areaOrder = ['WEST','EAST','artpieceWEST','artpieceEAST','その他'];
+  areas.sort((a,b) => {
+    const ia = areaOrder.indexOf(a), ib = areaOrder.indexOf(b);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+  tabsEl.innerHTML = areas.map(area =>
+    '<button class="btn btn-ghost btn-sm" onclick="selectMsgArea(\'' + area + '\')" id="msg-area-' + area + '">' + escHtml(area) + '</button>'
+  ).join('');
+}
+
+let currentMsgArea = null;
+
+window.selectMsgArea = function(area) {
+  currentMsgArea = area;
+  document.querySelectorAll('[id^="msg-area-"]').forEach(b => {
+    b.style.background = ''; b.style.color = ''; b.style.borderColor = '';
+  });
+  const activeBtn = document.getElementById('msg-area-' + area);
+  if (activeBtn) {
+    activeBtn.style.background = 'var(--accent)';
+    activeBtn.style.color = '#fff';
+    activeBtn.style.borderColor = 'var(--accent)';
+  }
+
+  const filtered = spaces.filter(sp => getAreaFromSpaceNumber(sp.spaceNumber) === area);
+  const listEl = document.getElementById('msg-space-list');
+  if (filtered.length === 0) {
+    listEl.innerHTML = '<div class="empty-state">このエリアにスペースがありません</div>';
+    return;
+  }
+
+  function getExAccess(ex) {
+    if (ex.accessOverride) return ex.accessOverride;
+    if (!ex.endDate) return 'open';
+    const now = new Date();
+    const end = new Date(ex.endDate + 'T23:59:59+09:00');
+    const diff = Math.floor((now - end) / (1000 * 60 * 60 * 24));
+    if (diff <= 3)  return 'open';
+    if (diff <= 7)  return 'readonly';
+    if (diff <= 10) return 'hidden';
+    return 'closed';
+  }
+
+  function makeExRow(ex, ei, spId, showOld) {
+    const access = getExAccess(ex);
+    const accessLabel = { open:'開催中/公開', readonly:'閲覧のみ', hidden:'非表示', closed:'クローズ' }[access] || access;
+    const accessColor = { open:'var(--green)', readonly:'#3a5fa0', hidden:'#888', closed:'var(--red)' }[access] || '#888';
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-light);">'
+      + '<div style="flex:1;min-width:0;">'
+      + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">'
+      + '<div style="font-size:12px;font-weight:700;color:var(--text);">' + escHtml(ex.name || '（タイトルなし）') + '</div>'
+      + '<span style="font-size:9px;color:' + accessColor + ';border:1px solid ' + accessColor + ';border-radius:3px;padding:1px 5px;">' + accessLabel + '</span>'
+      + '</div>'
+      + '<div style="font-size:11px;color:var(--text-mid);">' + escHtml(ex.artist || '') + '</div>'
+      + '<div style="font-size:10px;color:var(--text-light);">' + escHtml(ex.period || '') + '</div>'
+      + '</div>'
+      + '<button class="btn btn-ghost btn-sm" style="flex-shrink:0;margin-left:8px;" onclick="openMsgList(\'' + spId + '\',\'' + ex.id + '\',\'' + escHtml(ex.name||'展示'+(ei+1)) + '\')">'
+      + 'メッセージ</button>'
+      + '</div>';
+  }
+
+  listEl.innerHTML = filtered.map(sp => {
+    const exs = sp.exhibitions || [];
+    if (exs.length === 0) {
+      return '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px;">'
+        + '<div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:4px;">' + escHtml(sp.spaceNumber || sp.id) + '</div>'
+        + '<div style="font-size:11px;color:var(--text-light);">展示なし</div>'
+        + '</div>';
+    }
+
+    // open/readonlyを優先表示、hidden/closedは折りたたみ
+    const activeExs = exs.filter(ex => { const a = getExAccess(ex); return a === 'open' || a === 'readonly'; });
+    const oldExs    = exs.filter(ex => { const a = getExAccess(ex); return a === 'hidden' || a === 'closed'; });
+    const spUid = sp.id.replace(/[^a-zA-Z0-9]/g, '_');
+
+    const activeHtml = activeExs.length > 0
+      ? activeExs.map((ex,ei) => makeExRow(ex, ei, sp.id, false)).join('')
+      : '<div style="font-size:11px;color:var(--text-light);padding:4px 0;">現在公開中の展示はありません</div>';
+
+    const oldHtml = oldExs.length > 0
+      ? '<div style="margin-top:6px;">'
+        + '<button class="btn btn-ghost btn-sm" onclick="toggleOldExs(\'' + spUid + '\')" style="font-size:10px;width:100%;">過去の展示 (' + oldExs.length + '件) を表示/非表示</button>'
+        + '<div id="old-exs-' + spUid + '" style="display:none;">'
+        + oldExs.map((ex,ei) => makeExRow(ex, activeExs.length + ei, sp.id, true)).join('')
+        + '</div>'
+        + '</div>'
+      : '';
+
+    return '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px;">'
+      + '<div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:8px;">' + escHtml(sp.spaceNumber || sp.id) + '</div>'
+      + activeHtml
+      + oldHtml
+      + '</div>';
+  }).join('');
+};
+
+window.toggleOldExs = function(spUid) {
+  const el = document.getElementById('old-exs-' + spUid);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+};
+
+window.openMsgList = function(spaceId, exId, exName) {
+  document.getElementById('msg-list-card').style.display = 'block';
+  document.getElementById('msg-list-title').textContent = exName;
+  document.getElementById('msg-list-card').scrollIntoView({ behavior: 'smooth' });
+  loadMessages(spaceId, exId);
+};
+
+window.closeMsgList = function() {
+  document.getElementById('msg-list-card').style.display = 'none';
+};
 
 // ── QRコード一覧 ──────────────────────────────────────────
 const QR_COLORS = [

@@ -160,7 +160,6 @@
 
 <div id="fab">
   <div style="display:flex;align-items:center;gap:8px;">
-    <button id="back-btn" onclick="goBackToList()" style="background:rgba(196,160,130,0.9);color:#2c2416;border:none;border-radius:20px;padding:14px 14px;font-size:14px;cursor:pointer;box-shadow:0 4px 20px rgba(139,111,71,0.5);">← 一覧</button>
     <button onclick="openWrite()" id="write-btn">✏️ メッセージを書く</button>
     <div style="position:relative;">
       <button id="lang-btn" onclick="toggleLangMenu()" style="background:rgba(196,160,130,0.9);color:#2c2416;border:none;border-radius:20px;padding:14px 14px;font-size:14px;cursor:pointer;box-shadow:0 4px 20px rgba(139,111,71,0.5);">🌐</button>
@@ -281,10 +280,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db  = getFirestore(app);
-const params_   = new URLSearchParams(location.search);
-const SPACE_ID  = params_.get("space") || "space-1";
-const EX_ID     = params_.get("ex")    || null;
-let   isReadOnly = false;
+const SPACE_ID = new URLSearchParams(location.search).get("space") || "space-1";
 
 let myNick = "", isExhibitor = false, spaceData = null;
 let reportTarget = null, reportMode = "hide", reportReason = "";
@@ -422,29 +418,7 @@ async function init() {
   if (!spaceSnap.exists()) {
     spaceData = { name:"記憶の断片", artist:"山田 花子", period:"2026年4月19日 〜 5月3日", spaceNumber:"1-A", booth:"", sns:[{ type:"instagram", url:"https://instagram.com/demo", label:"@demo_art" }], exhibitorPassword:"passA", maxLength:200 };
   } else {
-    const raw = spaceSnap.data();
-    const exhibitions = raw.exhibitions || [];
-    let exData = EX_ID ? (exhibitions.find(e => e.id === EX_ID) || null) : null;
-    if (exData) {
-      spaceData = {
-        name:              exData.name              || raw.name    || "",
-        artist:            exData.artist            || raw.artist  || "",
-        period:            exData.period            || raw.period  || "",
-        spaceNumber:       raw.spaceNumber          || "",
-        booth:             exData.booth             || raw.booth   || "",
-        sns:               exData.sns               || raw.sns     || [],
-        exhibitorPassword: exData.exhibitorPassword || raw.exhibitorPassword || "",
-        maxLength:         exData.maxLength         || raw.maxLength || 200,
-      };
-      const access = exData.access || "open";
-      if (access === "closed") {
-        document.getElementById("loading").innerHTML = "<p style=\"color:#fff;text-align:center;padding:20px;\">このボードは現在閲覧できません</p>";
-        return;
-      }
-      if (access === "readonly") isReadOnly = true;
-    } else {
-      spaceData = raw;
-    }
+    spaceData = spaceSnap.data();
   }
 
   document.getElementById("space-title").textContent  = spaceData.name;
@@ -501,10 +475,6 @@ async function init() {
     snsWrap.appendChild(a);
   });
 
-  if (isReadOnly) {
-    const writeBtn = document.getElementById("write-btn");
-    if (writeBtn) writeBtn.style.display = "none";
-  }
   document.getElementById("loading").style.display = "none";
   document.getElementById("nickname-input").focus();
   document.querySelectorAll('.lang-item').forEach(function(b) { b.classList.toggle('active-lang', b.dataset.lang === ''); });
@@ -552,11 +522,6 @@ function escHtml(str) {
   return (str || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");
 }
 
-window.goBackToList = function() {
-  const landingUrl = 'https://dfg-message-board.firebaseapp.com/dfg-landing.html?space=' + encodeURIComponent(SPACE_ID) + '&showAll=1';
-  location.href = landingUrl;
-};
-
 window.submitNickname = function() {
   myNick = document.getElementById("nickname-input").value.trim() || (UI_TEXT[browserLang] || UI_TEXT['ja']).placeholder.replace('（任意）','').replace('(optional)','').replace('(선택)','').replace('（選填）','').replace('（选填）','').trim() || "来場者";
   // 匿名の場合はブラウザ言語に合わせた「来場者」相当に
@@ -594,7 +559,7 @@ window.submitPost = async function() {
   const text = document.getElementById("write-textarea").value.trim();
   if (!text) return;
   document.getElementById("post-btn").disabled = true;
-  await addDoc(collection(db, "spaces", SPACE_ID, "messages"), { sender: myNick, text, isExhibitor, hidden: false, timeStr: nowStr(), createdAt: serverTimestamp(), exhibitionId: EX_ID || null });
+  await addDoc(collection(db, "spaces", SPACE_ID, "messages"), { sender: myNick, text, isExhibitor, hidden: false, timeStr: nowStr(), createdAt: serverTimestamp() });
   closeWrite();
   setTimeout(() => { document.getElementById("board").scrollTo({ top: document.getElementById("board").scrollHeight, behavior: "smooth" }); }, 300);
 };
