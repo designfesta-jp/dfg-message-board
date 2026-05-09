@@ -72,26 +72,56 @@
     .exhibition-list {
       display: flex; flex-direction: column; gap: 12px;
       width: 100%; max-width: 360px;
+      margin: 0 auto;
     }
     .ex-card {
       background: #FFFDE7;
       border: 2px solid #FFD54F;
       border-radius: 8px;
-      padding: 14px 16px;
+      padding: 16px 16px 14px;
       cursor: pointer;
       transition: transform 0.15s, box-shadow 0.15s;
       position: relative;
+      width: 100%;
+      text-align: center;
     }
     .ex-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.3); }
-    .ex-card.active-ex { border-color: #2e7d52; }
+
+    /* 開催中カード：派手なスタイル */
+    .ex-card.active-ex {
+      background: linear-gradient(135deg, #FFFDE7 0%, #FFF8C0 40%, #FFFACD 100%);
+      border: 2px solid #D4AF37;
+      outline: 1px solid #F5D76E;
+      box-shadow: 0 0 0 3px rgba(212,175,55,0.2), 3px 6px 20px rgba(0,0,0,0.3), inset 0 0 20px rgba(255,220,80,0.08);
+    }
+    .ex-card.active-ex::before {
+      content: '⭐';
+      position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+      font-size: 22px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+    }
+    .ex-card.active-ex .ex-card-name {
+      color: #5a3e00; font-size: 17px;
+    }
+
     .ex-card.readonly-ex { border-color: #FFD54F; opacity: 0.85; }
     .ex-card.hidden-ex { border-color: #ccc; background: #f5f5f5; opacity: 0.7; }
     .ex-card-status {
+      display: inline-block;
       font-size: 10px; font-weight: 700; letter-spacing: 1px;
-      text-transform: uppercase; margin-bottom: 6px;
+      padding: 3px 10px; border-radius: 12px;
+      margin-bottom: 10px;
     }
-    .status-active { color: #2e7d52; }
-    .status-ended  { color: #8b4513; }
+    .status-active {
+      background: #2e7d52; color: #fff;
+      box-shadow: 0 2px 6px rgba(46,125,82,0.4);
+    }
+    .status-upcoming {
+      background: #3a5fa0; color: #fff;
+      box-shadow: 0 2px 6px rgba(58,95,160,0.4);
+    }
+    .status-ended {
+      background: #8b6220; color: rgba(255,255,255,0.85);
+    }
     .ex-card-name  { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
     .ex-card-artist{ font-size: 12px; color: var(--text-mid); margin-bottom: 4px; }
     .ex-card-period{ font-size: 11px; color: var(--text-light); }
@@ -102,6 +132,11 @@
     }
     .badge-readonly { background: #e8f0fd; color: #3a5fa0; border: 1px solid #b8cef0; }
     .badge-hidden   { background: #f3f4f6; color: #666; border: 1px solid #ddd; }
+
+    @keyframes sparkle { 0%,100% { opacity:0; transform:scale(0.5) rotate(0deg); } 50% { opacity:1; transform:scale(1.2) rotate(180deg); } }
+    @keyframes twinkle { 0%,100% { opacity:0.2; } 50% { opacity:1; } }
+    .sparkle { position:absolute; pointer-events:none; font-size:14px; animation:sparkle 1.6s infinite; color:#D4AF37; }
+    .sparkle:nth-child(odd) { animation-name:twinkle; color:#FFD700; font-size:11px; }
 
     .err-box {
       background: rgba(255,255,255,0.15);
@@ -252,18 +287,23 @@ async function init() {
   const title = activeExs.length > 1
     ? '開催中の展示が複数あります'
     : SHOW_ALL
-      ? 'メッセージボードを選択'
+      ? '展示を選択'
       : '過去の展示一覧';
   document.getElementById('select-title').textContent = title;
   document.getElementById('select-screen').style.display = 'block';
 
-  // 表示順：開催中→今後→終了（新しい順）
+  // 表示順：開催中→今後→終了（新しい順）、同一会期内はブース名順
   const sorted = [...visibleExs].sort((a, b) => {
     const order = { active: 0, upcoming: 1, ended: 2, unknown: 3 };
     const sa = order[getExhibitionStatus(a)];
     const sb = order[getExhibitionStatus(b)];
     if (sa !== sb) return sa - sb;
-    return (b.startDate || '') > (a.startDate || '') ? 1 : -1;
+    // 同じステータスなら日付（新しい順）
+    if ((a.startDate || '') !== (b.startDate || '')) {
+      return (b.startDate || '') > (a.startDate || '') ? 1 : -1;
+    }
+    // 同じ会期ならブース名順
+    return (a.booth || '').localeCompare(b.booth || '', 'ja', { numeric: true });
   });
 
   const list = document.getElementById('exhibition-list');
@@ -273,18 +313,27 @@ async function init() {
     const isHidden = access === 'hidden';
     const isReadonly = access === 'readonly';
     const statusLabel = status === 'active' ? '開催中' : status === 'upcoming' ? '開催予定' : '終了';
-    const statusClass = status === 'active' ? 'status-active' : 'status-ended';
+    const statusClass = status === 'active' ? 'status-active' : status === 'upcoming' ? 'status-upcoming' : 'status-ended';
     const cardClass = status === 'active' ? 'active-ex' : isHidden ? 'hidden-ex' : 'readonly-ex';
     const badgeHtml = isReadonly
       ? '<span class="ex-card-badge badge-readonly">閲覧のみ</span>'
       : isHidden ? '<span class="ex-card-badge badge-hidden">入室不可</span>' : '';
     const clickable = !isHidden;
+    const sparkles = status === 'active'
+      ? '<span class="sparkle" style="top:8px;left:8px;animation-delay:0s">✦</span>'
+        + '<span class="sparkle" style="top:8px;right:8px;animation-delay:0.5s">✧</span>'
+        + '<span class="sparkle" style="bottom:8px;left:8px;animation-delay:1.0s">★</span>'
+        + '<span class="sparkle" style="bottom:8px;right:8px;animation-delay:0.3s">✦</span>'
+      : '';
+    const activeMargin = status === 'active' ? 'margin-top:14px;' : '';
     return '<div class="ex-card ' + cardClass + '" '
       + (clickable ? 'onclick="enterExhibition(\'' + ex.id + '\')"' : '')
-      + ' style="' + (!clickable ? 'cursor:default;' : '') + '">'
+      + ' style="' + (!clickable ? 'cursor:default;' : '') + activeMargin + '">'
       + badgeHtml
+      + sparkles
       + '<div class="ex-card-status ' + statusClass + '">' + statusLabel + '</div>'
       + '<div class="ex-card-name">' + escHtml(ex.name || '—') + '</div>'
+      + (ex.booth ? '<div style="font-size:11px;font-weight:700;color:#8b6f47;margin-bottom:3px;">📍 ' + escHtml(ex.booth) + '</div>' : '')
       + '<div class="ex-card-artist">' + escHtml(ex.artist || '') + '</div>'
       + '<div class="ex-card-period">' + escHtml(ex.period || '') + '</div>'
       + '</div>';

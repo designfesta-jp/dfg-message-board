@@ -87,6 +87,7 @@
     .translating-box { background: #fff; border-radius: 12px; padding: 20px 28px; font-size: 14px; color: #6b5a42; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
     .overlay { position: fixed; inset: 0; background: var(--modal-bg); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 16px; }
     .overlay.hidden { display: none; }
+    .hidden { display: none; }
     .modal { background: #fff; border-radius: 16px; width: 100%; max-width: 340px; box-shadow: 0 8px 40px rgba(0,0,0,0.28); overflow: hidden; }
     .modal-body { padding: 28px 24px; display: flex; flex-direction: column; gap: 12px; }
     .modal-icon { font-size: 34px; text-align: center; }
@@ -160,7 +161,7 @@
 
 <div id="fab">
   <div style="display:flex;align-items:center;gap:8px;">
-    <button id="back-btn" onclick="goBackToList()" style="background:rgba(196,160,130,0.9);color:#2c2416;border:none;border-radius:20px;padding:14px 14px;font-size:14px;cursor:pointer;box-shadow:0 4px 20px rgba(139,111,71,0.5);">← 一覧</button>
+    <button id="back-btn" onclick="goBackToList()" style="background:rgba(196,160,130,0.9);color:#2c2416;border:none;border-radius:20px;padding:14px;font-size:18px;cursor:pointer;box-shadow:0 4px 20px rgba(139,111,71,0.5);line-height:1;">←</button>
     <button onclick="openWrite()" id="write-btn">✏️ メッセージを書く</button>
     <div style="position:relative;">
       <button id="lang-btn" onclick="toggleLangMenu()" style="background:rgba(196,160,130,0.9);color:#2c2416;border:none;border-radius:20px;padding:14px 14px;font-size:14px;cursor:pointer;box-shadow:0 4px 20px rgba(139,111,71,0.5);">🌐</button>
@@ -180,10 +181,9 @@
 <div class="overlay" id="modal-nickname">
   <div class="modal"><div class="modal-body">
     <div class="modal-icon">📌</div>
-    <div class="modal-title" id="ui-welcome">ギャラリーへようこそ</div>
-    <div class="modal-sub" id="welcome-space-name"></div>
+    <div class="modal-title" id="ui-welcome">ようこそ</div>
     <div class="modal-hint" id="ui-nickname-hint">ニックネームを入力してください<br><span style="font-size:11px">空白のまま入室すると「来場者」として参加できます</span></div>
-    <input class="field" id="nickname-input" placeholder="あなたの名前（任意）" maxlength="20" />
+    <input class="field" id="nickname-input" placeholder="ニックネーム（任意）" maxlength="20" />
     <button class="btn btn-primary" id="ui-enter-btn" onclick="submitNickname()">入室する</button>
   </div></div>
 </div>
@@ -342,7 +342,7 @@ function detectBrowserLang() {
 var browserLang = detectBrowserLang();
 
 var UI_TEXT = {
-  ja: { welcome: 'ギャラリーへようこそ', hint: 'ニックネームを入力してください<br><span style="font-size:11px">空白のまま入室すると「来場者」として参加できます</span>', placeholder: 'あなたの名前（任意）', enter: '入室する', writePlaceholder: 'メッセージを書いてください…', post: '📌 送る', cancel: 'キャンセル', writeBtn: '✏️ メッセージを書く' },
+  ja: { welcome: 'ようこそ', hint: 'ニックネームを入力してください<br><span style="font-size:11px">空白のまま入室すると「来場者」として参加できます</span>', placeholder: 'ニックネーム（任意）', enter: '入室する', writePlaceholder: 'メッセージを書いてください…', post: '📌 送る', cancel: 'キャンセル', writeBtn: '✏️ メッセージを書く' },
   en: { welcome: 'Welcome to the Gallery', hint: 'Enter your nickname<br><span style="font-size:11px">Leave blank to join as "Visitor"</span>', placeholder: 'Your name (optional)', enter: 'Enter', writePlaceholder: 'Write your message…', post: '📌 Post', cancel: 'Cancel', writeBtn: '✏️ Write a message' },
   ko: { welcome: '갤러리에 오신 것을 환영합니다', hint: '닉네임을 입력해 주세요<br><span style="font-size:11px">공백으로 두면 "방문자"로 참가합니다</span>', placeholder: '이름 (선택)', enter: '입장', writePlaceholder: '메시지를 입력하세요…', post: '📌 보내기', cancel: '취소', writeBtn: '✏️ 메시지 쓰기' },
   'zh-tw': { welcome: '歡迎來到畫廊', hint: '請輸入您的暱稱<br><span style="font-size:11px">留空則以「參觀者」身份參加</span>', placeholder: '您的名字（選填）', enter: '進入', writePlaceholder: '請寫下您的留言…', post: '📌 發送', cancel: '取消', writeBtn: '✏️ 寫留言' },
@@ -416,6 +416,7 @@ window.selectLang = async function(lang) {
 // ── 初期化 ───────────────────────────────────────────────
 async function init() {
   applyUILang();
+  await loadNgwords();
 
   const spaceRef = doc(db, "spaces", SPACE_ID);
   const spaceSnap = await getDoc(spaceRef);
@@ -450,7 +451,6 @@ async function init() {
   document.getElementById("space-title").textContent  = spaceData.name;
   document.getElementById("space-artist").textContent = spaceData.artist || "";
   document.getElementById("space-period").textContent = spaceData.period || "";
-  document.getElementById("welcome-space-name").textContent = spaceData.name;
 
   if (spaceData.spaceNumber) document.getElementById("space-spacenum").textContent = spaceData.spaceNumber;
   if (spaceData.booth) { document.getElementById("space-booth").textContent = spaceData.booth; document.getElementById("space-booth").style.display = "block"; }
@@ -510,7 +510,15 @@ async function init() {
   document.querySelectorAll('.lang-item').forEach(function(b) { b.classList.toggle('active-lang', b.dataset.lang === ''); });
 
   const msgsRef = query(collection(db, "spaces", SPACE_ID, "messages"), orderBy("createdAt", "asc"));
-  onSnapshot(msgsRef, snap => { renderNotes(snap.docs.map(d => ({ id: d.id, ...d.data() }))); });
+  onSnapshot(msgsRef, snap => {
+    const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // EX_IDが指定されている場合は該当展示のメッセージのみ表示
+    // exhibitionIdがnullの古いメッセージはEX_IDが一致する場合のみ表示
+    const filtered = EX_ID
+      ? all.filter(m => m.exhibitionId === EX_ID || m.exhibitionId === null || m.exhibitionId === undefined)
+      : all;
+    renderNotes(filtered);
+  });
 }
 
 // ── 付箋描画 ─────────────────────────────────────────────
@@ -518,7 +526,7 @@ function renderNotes(messages) {
   allMessages = messages;
   const grid = document.getElementById("notes-grid");
   grid.innerHTML = "";
-  const visible = messages.filter(m => !m.hidden || isExhibitor);
+  const visible = messages.filter(m => !m.deleted && (!m.hidden || isExhibitor));
   if (visible.length === 0) {
     grid.innerHTML = `<div class="empty-msg">まだメッセージはありません<br />最初のメッセージを送ってみましょう ✏️</div>`;
     return;
@@ -542,6 +550,7 @@ function renderNotes(messages) {
       <div class="sticky-footer">
         <span class="sticky-meta">${escHtml(msg.sender || "来場者")} · ${msg.timeStr || ""}</span>
         ${!isHidden && isExhibitor ? `<button class="report-btn" onclick="openReport('${msg.id}')">⚑</button>` : ""}
+        ${isExhibitor && msg.isExhibitor && !isHidden ? `<button class="report-btn" style="right:32px;background:rgba(139,98,32,0.15);font-size:10px;" onclick="exhibitorDeleteMsg('${msg.id}')">削除</button>` : ""}
       </div>`;
     grid.appendChild(el);
   });
@@ -557,12 +566,55 @@ window.goBackToList = function() {
   location.href = landingUrl;
 };
 
+// ── NGワード ──────────────────────────────────────────────
+let ngwords = [];
+async function loadNgwords() {
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'ngwords'));
+    ngwords = snap.exists() ? (snap.data().words || []) : [];
+  } catch(e) { ngwords = []; }
+}
+
+function checkNgwords(text) {
+  return ngwords.find(w => w && text.includes(w)) || null;
+}
+
+async function reportNgword(text, detected, type) {
+  try {
+    await addDoc(collection(db, 'reports'), {
+      spaceId: SPACE_ID,
+      spaceName: spaceData?.spaceNumber || '',
+      msgText: text,
+      type: 'auto',
+      reason: 'NGワード検出: ' + detected,
+      note: 'ニックネーム/メッセージ種別: ' + type,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+  } catch(e) { console.error(e); }
+}
+
+window.exhibitorDeleteMsg = async function(msgId) {
+  if (!confirm('このメッセージを削除しますか？')) return;
+  await updateDoc(doc(db, "spaces", SPACE_ID, "messages", msgId), { deleted: true, hiddenBy: 'exhibitor' });
+  showToast('削除しました');
+};
+
 window.submitNickname = function() {
   myNick = document.getElementById("nickname-input").value.trim() || (UI_TEXT[browserLang] || UI_TEXT['ja']).placeholder.replace('（任意）','').replace('(optional)','').replace('(선택)','').replace('（選填）','').replace('（选填）','').trim() || "来場者";
   // 匿名の場合はブラウザ言語に合わせた「来場者」相当に
   const val = document.getElementById("nickname-input").value.trim();
   const visitorNames = { ja:'来場者', en:'Visitor', ko:'방문자', 'zh-tw':'參觀者', 'zh-cn':'参观者' };
   myNick = val || (visitorNames[browserLang] || '来場者');
+  // NGワードチェック
+  if (val) {
+    const detected = checkNgwords(val);
+    if (detected) {
+      alert('不適切な表現が含まれています。別のニックネームを入力してください。');
+      reportNgword(val, detected, 'ニックネーム');
+      return;
+    }
+  }
   document.getElementById("modal-nickname").classList.add("hidden");
 };
 document.getElementById("nickname-input").addEventListener("keydown", e => { if (e.key === "Enter") window.submitNickname(); });
@@ -593,6 +645,14 @@ window.updateCount = function() {
 window.submitPost = async function() {
   const text = document.getElementById("write-textarea").value.trim();
   if (!text) return;
+  // NGワードチェック
+  const detected = checkNgwords(text);
+  if (detected) {
+    alert('不適切な表現が含まれています。投稿できません。');
+    await reportNgword(text, detected, 'メッセージ');
+    document.getElementById("post-btn").disabled = false;
+    return;
+  }
   document.getElementById("post-btn").disabled = true;
   await addDoc(collection(db, "spaces", SPACE_ID, "messages"), { sender: myNick, text, isExhibitor, hidden: false, timeStr: nowStr(), createdAt: serverTimestamp(), exhibitionId: EX_ID || null });
   closeWrite();
