@@ -246,6 +246,17 @@ async function init() {
   if (!snap.exists()) { showError('スペースが見つかりませんでした'); return; }
 
   const spaceData = snap.data();
+
+  // mainSpaceIdが設定されている場合はメインスペースにリダイレクト
+  if (spaceData.mainSpaceId) {
+    const newUrl = location.href.replace(
+      'space=' + encodeURIComponent(SPACE_ID),
+      'space=' + encodeURIComponent(spaceData.mainSpaceId)
+    );
+    location.replace(newUrl);
+    return;
+  }
+
   const exhibitions = spaceData.exhibitions || [];
 
   document.getElementById('space-label').textContent = spaceData.spaceNumber || SPACE_ID;

@@ -58,7 +58,11 @@
     .divider { display: flex; align-items: center; gap: 10; margin: 10px 0 18px; }
     .divider-line { flex: 1; height: 1px; background: rgba(255,255,255,0.22); }
     .divider-label { font-size: 10px; color: rgba(255,255,255,0.45); letter-spacing: 2px; }
-    #notes-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 12px; align-items: start; }
+    #notes-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; align-items: start; }
+    .notes-col { display: flex; flex-direction: column; gap: 16px; }
+    .reply-group { display: flex; flex-direction: column; gap: 0; }
+    .reply-group .sticky:not(:first-child) { margin-top: -10px; margin-left: 10px; rotate: 1deg; }
+    .reply-tape { position: absolute; top: -8px; left: 50%; transform: translateX(-50%) rotate(-2deg); width: 40px; height: 14px; background: rgba(255,230,100,0.55); border: 1px solid rgba(200,180,80,0.4); border-radius: 1px; z-index: 1; }
     .empty-msg { grid-column: 1/-1; text-align: center; color: rgba(255,255,255,0.45); padding: 40px 0; font-size: 13px; font-style: italic; line-height: 2; }
     .sticky { border-radius: 3px; padding: 26px 12px 12px; position: relative; box-shadow: 2px 4px 10px rgba(0,0,0,0.2), 0 1px 2px rgba(0,0,0,0.1); transition: transform 0.15s; }
     .sticky.hidden-note { opacity: 0.5; box-shadow: none; background: #ddd !important; border-color: #bbb !important; }
@@ -66,6 +70,15 @@
     .pin-visitor { background: radial-gradient(circle at 38% 32%, #ff8a80, #c62828); }
     .pin-exhibitor { background: radial-gradient(circle at 38% 32%, #FFD54F, #F57F17); }
     .pin-hidden { background: #bbb; }
+    .sticky.reply-sticky {
+      border-left: 3px solid #2e7d52 !important;
+    }
+    .reply-sender-tag {
+      font-size: 9px;
+      color: #2e7d52;
+      margin-bottom: 4px;
+      display: block;
+    }
     .sticky.exhibitor-sticky { background: linear-gradient(135deg, #FFFDE7 0%, #FFF8C0 40%, #FFFACD 100%) !important; border: 2px solid #D4AF37 !important; outline: 1px solid #F5D76E; box-shadow: 0 0 0 3px rgba(212,175,55,0.15), 3px 6px 16px rgba(0,0,0,0.25), 0 1px 3px rgba(0,0,0,0.15), inset 0 0 20px rgba(255,220,80,0.08) !important; }
     .sticky-exhibitor-ribbon { position: absolute; top: -1px; right: -1px; width: 52px; height: 52px; overflow: hidden; z-index: 2; }
     .sticky-exhibitor-ribbon::before { content: 'Artist'; position: absolute; top: 12px; right: -14px; background: linear-gradient(135deg, #D4AF37, #F5D76E); color: #5a3e00; font-size: 8px; font-weight: 700; padding: 3px 18px; transform: rotate(45deg); box-shadow: 0 2px 4px rgba(0,0,0,0.2); letter-spacing: 0.5px; white-space: nowrap; }
@@ -75,8 +88,8 @@
     .hidden-label { font-size: 11px; color: #999; font-style: italic; margin-bottom: 4px; }
     .sticky-text { font-size: 13px; line-height: 1.65; color: #2c2416; word-break: break-word; margin-bottom: 8px; }
     .sticky-footer { display: flex; align-items: center; justify-content: space-between; }
-    .sticky-meta { font-size: 9px; color: #999; }
-    .report-btn { font-size: 10px; background: none; border: none; cursor: pointer; color: #bbb; padding: 2px 4px; }
+    .sticky-meta { font-size: 9px; color: #666; }
+    .report-btn { font-size: 12px; background: none; border: none; cursor: pointer; color: #888; padding: 2px 4px; position: absolute; }
     #fab { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 50; }
     #write-btn { background: var(--accent); color: #fff; border: none; border-radius: 28px; padding: 14px 28px; font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit; box-shadow: 0 4px 20px rgba(139,111,71,0.5); letter-spacing: 0.5px; white-space: nowrap; }
     .lang-item { display: block; width: 100%; padding: 10px 16px; background: none; border: none; text-align: left; font-size: 13px; color: #2c2416; cursor: pointer; font-family: inherit; border-bottom: 1px solid #f0e8d8; }
@@ -138,6 +151,16 @@
           <div id="exhibitor-logged-in" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;">
             <span class="exhibitor-badge">✓ 出展者としてログイン中</span>
             <button class="exhibitor-login-btn" onclick="exhibitorLogout()" style="color:#c0392b;border-color:#e8b4ae;">ログアウト</button>
+            <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-light);">
+              <span>通知</span>
+              <label style="position:relative;display:inline-block;width:36px;height:20px;cursor:pointer;">
+                <input type="checkbox" id="notify-toggle" onchange="toggleNotify(this.checked)" style="opacity:0;width:0;height:0;">
+                <span id="notify-slider" style="position:absolute;inset:0;background:#ccc;border-radius:10px;transition:0.3s;">
+                  <span id="notify-knob" style="position:absolute;height:16px;width:16px;left:2px;top:2px;background:#fff;border-radius:50%;transition:0.3s;"></span>
+                </span>
+              </label>
+              <span id="notify-label">OFF</span>
+            </div>
           </div>
         </div>
       </div>
@@ -426,6 +449,7 @@ async function init() {
     const raw = spaceSnap.data();
     const exhibitions = raw.exhibitions || [];
     let exData = EX_ID ? (exhibitions.find(e => e.id === EX_ID) || null) : null;
+    window._exData = exData;
     if (exData) {
       spaceData = {
         name:              exData.name              || raw.name    || "",
@@ -437,8 +461,21 @@ async function init() {
         exhibitorPassword: exData.exhibitorPassword || raw.exhibitorPassword || "",
         maxLength:         exData.maxLength         || raw.maxLength || 200,
       };
-      const access = exData.access || "open";
-      if (access === "closed") {
+      // 日付から自動計算（accessOverrideで手動上書き可）
+      function calcAccess(ex) {
+        if (ex.accessOverride) return ex.accessOverride;
+        if (!ex.endDate) return 'open';
+        const now = new Date();
+        const end = new Date(ex.endDate + 'T23:59:59+09:00');
+        const diff = Math.floor((now - end) / (1000 * 60 * 60 * 24));
+        if (diff < 0)   return 'open';
+        if (diff <= 3)  return 'open';
+        if (diff <= 7)  return 'readonly';
+        if (diff <= 10) return 'hidden';
+        return 'closed';
+      }
+      const access = calcAccess(exData);
+      if (access === "closed" || access === "hidden") {
         document.getElementById("loading").innerHTML = "<p style=\"color:#fff;text-align:center;padding:20px;\">このボードは現在閲覧できません</p>";
         return;
       }
@@ -503,7 +540,11 @@ async function init() {
 
   if (isReadOnly) {
     const writeBtn = document.getElementById("write-btn");
-    if (writeBtn) writeBtn.style.display = "none";
+    if (writeBtn) {
+      writeBtn.onclick = function() {
+        alert('展示終了4日以上のため書き込みできません。\n展示終了8日後は閲覧もできなくなります。');
+      };
+    }
   }
   document.getElementById("loading").style.display = "none";
   document.getElementById("nickname-input").focus();
@@ -531,12 +572,45 @@ function renderNotes(messages) {
     grid.innerHTML = `<div class="empty-msg">まだメッセージはありません<br />最初のメッセージを送ってみましょう ✏️</div>`;
     return;
   }
-  visible.forEach(msg => {
+  // 返信を元メッセージの直後に挿入
+  const roots = visible.filter(m => !m.replyTo);
+  const replies = visible.filter(m => !!m.replyTo);
+  const sortedVisible = [];
+  roots.forEach(root => {
+    sortedVisible.push(root);
+    replies.filter(r => r.replyTo === root.id).forEach(r => sortedVisible.push(r));
+  });
+  replies.filter(r => !roots.find(root => root.id === r.replyTo)).forEach(r => sortedVisible.push(r));
+  // 2列グリッドに左右列を作成
+  const leftCol = document.createElement('div');
+  leftCol.className = 'notes-col';
+  const rightCol = document.createElement('div');
+  rightCol.className = 'notes-col';
+  grid.appendChild(leftCol);
+  grid.appendChild(rightCol);
+
+  // ルートメッセージを左右に振り分け
+  let colIndex = 0;
+  const colAssign = {};
+  roots.forEach(msg => {
+    colAssign[msg.id] = colIndex % 2;
+    colIndex++;
+  });
+
+  // グループ（元メッセージ+返信）をまとめて列に追加
+  roots.forEach(msg => {
+    const col = colAssign[msg.id] === 0 ? leftCol : rightCol;
+    const group = document.createElement('div');
+    group.className = 'reply-group';
+
+    [msg, ...replies.filter(r => r.replyTo === msg.id)].forEach((m, gi) => {
+    const isReply = gi > 0;
+    const msg = m;
     const isHidden = !!msg.hidden, isExhibMsg = !!msg.isExhibitor;
     const color = isExhibMsg ? EXHIBITOR_COLOR : hashColor(msg.sender || "来場者");
     const tilt  = tiltDeg(msg.id);
     const el = document.createElement("div");
-    el.className = "sticky" + (isHidden ? " hidden-note" : "") + (isExhibMsg && !isHidden ? " exhibitor-sticky" : "");
+    el.className = "sticky" + (isHidden ? " hidden-note" : "") + (isExhibMsg && !isHidden ? " exhibitor-sticky" : "") + (isReply ? " reply-sticky" : "");
     el.style.background = isHidden ? "#ddd" : color.bg;
     el.style.border     = `1px solid ${isHidden ? "#bbb" : color.border}`;
     el.style.transform  = `rotate(${tilt}deg)`;
@@ -546,14 +620,39 @@ function renderNotes(messages) {
     const displayText = currentLang && translationCache[msg.id] && translationCache[msg.id][currentLang] ? translationCache[msg.id][currentLang] : msg.text;
     el.innerHTML = `${pinHtml}${ribbonHtml}${sparkles}
       ${isHidden ? `<div class="hidden-label">${msg.hiddenBy === "admin" ? "管理者によって非公開" : "非公開"}</div>` : ""}
+
       ${!isHidden ? `<p class="sticky-text">${escHtml(displayText)}</p>` : ""}
+      ${!isHidden && isExhibitor && !msg.isExhibitor ? `<button class="report-btn" style="top:8px;right:8px;bottom:auto;color:#888;" onclick="openReport('${msg.id}')">⚑</button>` : ""}
+      ${isExhibitor && msg.isExhibitor && !isHidden ? `<button class="report-btn" style="bottom:8px;right:8px;top:auto;color:#a04020;font-size:11px;" onclick="exhibitorDeleteMsg('${msg.id}')">✕</button>` : ""}
+      ${isExhibitor && !msg.isExhibitor && !isHidden ? `<button class="report-btn" style="bottom:8px;right:8px;top:auto;color:#2e7d52;font-size:12px;" onclick="openReply('${msg.id}','${escHtml(msg.sender || '来場者')}')">↩</button>` : ""}
       <div class="sticky-footer">
         <span class="sticky-meta">${escHtml(msg.sender || "来場者")} · ${msg.timeStr || ""}</span>
-        ${!isHidden && isExhibitor ? `<button class="report-btn" onclick="openReport('${msg.id}')">⚑</button>` : ""}
-        ${isExhibitor && msg.isExhibitor && !isHidden ? `<button class="report-btn" style="right:32px;background:rgba(139,98,32,0.15);font-size:10px;" onclick="exhibitorDeleteMsg('${msg.id}')">削除</button>` : ""}
       </div>`;
-    grid.appendChild(el);
+      if (isReply) {
+        const tape = document.createElement('div');
+        tape.className = 'reply-tape';
+        el.appendChild(tape);
+      }
+      group.appendChild(el);
+    });
+    col.appendChild(group);
   });
+
+  // replyToが見つからない返信は右列末尾に追加
+  replies.filter(r => !roots.find(root => root.id === r.replyTo)).forEach(msg => {
+    const isReply = true;
+    const isHidden = !!msg.hidden, isExhibMsg = !!msg.isExhibitor;
+    const color = isExhibMsg ? EXHIBITOR_COLOR : hashColor(msg.sender || "来場者");
+    const tilt = tiltDeg(msg.id);
+    const el = document.createElement("div");
+    el.className = "sticky" + (isHidden ? " hidden-note" : "") + (isExhibMsg && !isHidden ? " exhibitor-sticky" : "") + " reply-sticky";
+    el.style.background = isHidden ? "#ddd" : color.bg;
+    el.style.border = `1px solid ${isHidden ? "#bbb" : color.border}`;
+    el.style.transform = `rotate(${tilt}deg)`;
+    el.innerHTML = `<div class="pin pin-visitor"></div><span class="reply-tag">↩ 返信</span><p class="sticky-text">${escHtml(msg.text)}</p><div class="sticky-footer"><span class="sticky-meta">${escHtml(msg.sender || "来場者")} · ${msg.timeStr || ""}</span></div>`;
+    rightCol.appendChild(el);
+  });
+
   window._messages = messages;
 }
 
@@ -593,6 +692,43 @@ async function reportNgword(text, detected, type) {
     });
   } catch(e) { console.error(e); }
 }
+
+window.openReply = function(msgId, senderName) {
+  window._replyToId = msgId;
+  window._replyToSender = senderName;
+  const textarea = document.getElementById("write-textarea");
+  const modal = document.getElementById("modal-write");
+  const label = document.querySelector("#modal-write .modal-title");
+  if (label) label.textContent = `↩ ${senderName}さんへの返信`;
+  if (textarea) { textarea.value = ""; }
+  document.getElementById("post-btn").disabled = true;
+  modal?.classList.remove("hidden");
+  textarea?.focus();
+};
+
+window.toggleNotify = async function(enabled) {
+  const slider = document.getElementById('notify-slider');
+  const knob = document.getElementById('notify-knob');
+  const label = document.getElementById('notify-label');
+  if (enabled) {
+    slider.style.background = '#2e7d52';
+    knob.style.left = '18px';
+    label.textContent = 'ON';
+  } else {
+    slider.style.background = '#ccc';
+    knob.style.left = '2px';
+    label.textContent = 'OFF';
+  }
+  // Firestoreに保存
+  try {
+    const spaceRef = doc(db, 'spaces', SPACE_ID);
+    const spaceSnap = await getDoc(spaceRef);
+    const exs = spaceSnap.data()?.exhibitions || [];
+    const updatedExs = exs.map(ex => ex.id === EX_ID ? { ...ex, notifyEnabled: enabled } : ex);
+    await updateDoc(spaceRef, { exhibitions: updatedExs });
+    if (window._exData) window._exData.notifyEnabled = enabled;
+  } catch(e) { console.error(e); }
+};
 
 window.exhibitorDeleteMsg = async function(msgId) {
   if (!confirm('このメッセージを削除しますか？')) return;
@@ -635,7 +771,13 @@ window.openWrite = function() {
   document.getElementById("modal-write").classList.remove("hidden");
   setTimeout(() => document.getElementById("write-textarea").focus(), 50);
 };
-window.closeWrite = function() { document.getElementById("modal-write").classList.add("hidden"); };
+window.closeWrite = function() {
+  document.getElementById("modal-write").classList.add("hidden");
+  window._replyToId = null;
+  window._replyToSender = null;
+  const label = document.querySelector("#modal-write .modal-title");
+  if (label) label.textContent = "メッセージを書く";
+};
 window.updateCount = function() {
   const max = window.MAX_LENGTH || 200;
   const len = document.getElementById("write-textarea").value.length;
@@ -654,9 +796,15 @@ window.submitPost = async function() {
     return;
   }
   document.getElementById("post-btn").disabled = true;
-  await addDoc(collection(db, "spaces", SPACE_ID, "messages"), { sender: myNick, text, isExhibitor, hidden: false, timeStr: nowStr(), createdAt: serverTimestamp(), exhibitionId: EX_ID || null });
+  const replyTo = window._replyToId || null;
+  await addDoc(collection(db, "spaces", SPACE_ID, "messages"), { sender: myNick, text, isExhibitor, hidden: false, timeStr: nowStr(), createdAt: serverTimestamp(), exhibitionId: EX_ID || null, replyTo });
+  const wasReply = !!replyTo;
+  window._replyToId = null;
+  window._replyToSender = null;
   closeWrite();
-  setTimeout(() => { document.getElementById("board").scrollTo({ top: document.getElementById("board").scrollHeight, behavior: "smooth" }); }, 300);
+  if (!wasReply) {
+    setTimeout(() => { document.getElementById("board").scrollTo({ top: document.getElementById("board").scrollHeight, behavior: "smooth" }); }, 300);
+  }
 };
 
 window.openExhibitorLogin = function() {
@@ -673,6 +821,25 @@ window.submitExhibitorLogin = function() {
     if (spaceData?.artist) myNick = spaceData.artist;
     document.getElementById('exhibitor-login-btn').style.display = 'none';
     document.getElementById('exhibitor-logged-in').style.display = 'flex';
+    // 通知トグルの初期状態を設定
+    // exDataのnotifyEnabledを参照（未設定はtrue=ON）
+    const notifyEnabled = window._exData?.notifyEnabled !== false;
+    const toggle = document.getElementById('notify-toggle');
+    if (toggle) {
+      toggle.checked = notifyEnabled;
+      const slider = document.getElementById('notify-slider');
+      const knob = document.getElementById('notify-knob');
+      const label = document.getElementById('notify-label');
+      if (notifyEnabled) {
+        slider.style.background = '#2e7d52';
+        knob.style.left = '18px';
+        label.textContent = 'ON';
+      } else {
+        slider.style.background = '#ccc';
+        knob.style.left = '2px';
+        label.textContent = 'OFF';
+      }
+    }
     closeExhibitorLogin();
     if (window._messages) renderNotes(window._messages);
   } else {
