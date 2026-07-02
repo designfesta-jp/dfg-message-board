@@ -370,6 +370,7 @@
       <button class="btn btn-ghost btn-sm" onclick="initSpaces()">🏛 初期スペースを作成</button>
       <button class="btn btn-ghost btn-sm" id="group-mode-btn" onclick="toggleGroupMode()">🔗 グループ化モード</button>
       <button class="btn btn-danger btn-sm" id="sp-delete-toggle-btn" onclick="enableSpaceDelete()" style="color:#fff;">🗑 スペース削除を有効化</button>
+      <button class="btn btn-danger btn-sm" onclick="resetAllTestData()" style="color:#fff;background:#8b2020;">🧹 全展示・全メッセージを削除（本番前リセット）</button>
       </div>
       <div id="group-mode-actions" style="display:none;margin-top:10px;display:none;gap:8px;justify-content:center;">
         <span style="font-size:12px;color:var(--text-mid);align-self:center;">スペースを選択してグループ化</span>
@@ -665,6 +666,7 @@ async function loadAll() {
   await loadSpaces();
   listenReports();
   await loadNgwords();
+  await loadPasswords();
   checkQueue();
 }
 
@@ -1333,6 +1335,28 @@ window.ungroupSpace = async function(spId) {
   await setDoc(doc(db, 'spaces', spId), { mainSpaceId: null }, { merge: true });
   showToast('グループを解除しました');
   await loadSpaces();
+};
+
+window.resetAllTestData = async function() {
+  if (!confirm('全スペースの展示情報と全メッセージを削除します。\nこの操作は取り消せません。\n本当に実行しますか？')) return;
+  if (!confirm('最終確認：本番稼働前のリセットです。\n本当によろしいですか？')) return;
+  try {
+    showToast('削除中…しばらくお待ちください');
+    for (const sp of spaces) {
+      // exhibitionsを空にする
+      await setDoc(doc(db, 'spaces', sp.id), { exhibitions: [], mainSpaceId: null }, { merge: true });
+      // messagesサブコレクションを全削除
+      const msgsSnap = await getDocs(collection(db, 'spaces', sp.id, 'messages'));
+      for (const msgDoc of msgsSnap.docs) {
+        await deleteDoc(doc(db, 'spaces', sp.id, 'messages', msgDoc.id));
+      }
+    }
+    showToast('✓ 全ての展示情報とメッセージを削除しました');
+    await loadSpaces();
+  } catch(e) {
+    console.error(e);
+    showToast('削除中にエラーが発生しました');
+  }
 };
 
 window.enableSpaceDelete = function() {
@@ -2265,6 +2289,7 @@ function renderPwTable() {
       <button class="btn btn-ghost btn-sm" onclick="initSpaces()">🏛 初期スペースを作成</button>
       <button class="btn btn-ghost btn-sm" id="group-mode-btn" onclick="toggleGroupMode()">🔗 グループ化モード</button>
       <button class="btn btn-danger btn-sm" id="sp-delete-toggle-btn" onclick="enableSpaceDelete()" style="color:#fff;">🗑 スペース削除を有効化</button>
+      <button class="btn btn-danger btn-sm" onclick="resetAllTestData()" style="color:#fff;background:#8b2020;">🧹 全展示・全メッセージを削除（本番前リセット）</button>
       </div>
       <div id="group-mode-actions" style="display:none;margin-top:10px;display:none;gap:8px;justify-content:center;">
         <span style="font-size:12px;color:var(--text-mid);align-self:center;">スペースを選択してグループ化</span>
@@ -2560,6 +2585,7 @@ async function loadAll() {
   await loadSpaces();
   listenReports();
   await loadNgwords();
+  await loadPasswords();
   checkQueue();
 }
 
@@ -3228,6 +3254,28 @@ window.ungroupSpace = async function(spId) {
   await setDoc(doc(db, 'spaces', spId), { mainSpaceId: null }, { merge: true });
   showToast('グループを解除しました');
   await loadSpaces();
+};
+
+window.resetAllTestData = async function() {
+  if (!confirm('全スペースの展示情報と全メッセージを削除します。\nこの操作は取り消せません。\n本当に実行しますか？')) return;
+  if (!confirm('最終確認：本番稼働前のリセットです。\n本当によろしいですか？')) return;
+  try {
+    showToast('削除中…しばらくお待ちください');
+    for (const sp of spaces) {
+      // exhibitionsを空にする
+      await setDoc(doc(db, 'spaces', sp.id), { exhibitions: [], mainSpaceId: null }, { merge: true });
+      // messagesサブコレクションを全削除
+      const msgsSnap = await getDocs(collection(db, 'spaces', sp.id, 'messages'));
+      for (const msgDoc of msgsSnap.docs) {
+        await deleteDoc(doc(db, 'spaces', sp.id, 'messages', msgDoc.id));
+      }
+    }
+    showToast('✓ 全ての展示情報とメッセージを削除しました');
+    await loadSpaces();
+  } catch(e) {
+    console.error(e);
+    showToast('削除中にエラーが発生しました');
+  }
 };
 
 window.enableSpaceDelete = function() {
