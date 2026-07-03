@@ -1,4 +1,5 @@
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");
 
@@ -53,5 +54,48 @@ exports.onMessageCreated = onDocumentCreated(
       },
       createdAt: new Date(),
     });
+  }
+);
+
+
+// 毎日午前3時（JST）に、終了日を過ぎたグループ化を自動解除
+exports.cleanupExpiredGroups = onSchedule(
+  {
+    schedule: "0 3 * * *",
+    timeZone: "Asia/Tokyo",
+    region: "asia-northeast1",
+  },
+  async (event) => {
+    const db = getFirestore();
+    const spacesSnap = await db.collection("spaces").get();
+    const spaces = spacesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    const now = new Date();
+
+    // グループ化されている（mainSpaceIdを持つ）スペースを抽出
+    const groupedSubs = spaces.filter(sp => sp.mainSpaceId);
+
+    for (const sub of groupedSubs) {
+      const mainSpace = spaces.find(sp => sp.id === sub.mainSpaceId);
+      if (!mainSpace) {
+        // メインが見つからない（削除済みなど）場合は解除
+        await db.doc(`spaces/${sub.id}`).update({ mainSpaceId: null });
+        continue;
+      }
+
+      // メインスペースの現在の展示（最新＝配列先頭）の終了日を確認
+      const mainExhibitions = mainSpace.exhibitions || [];
+      const latestEx = mainExhibitions[0];
+
+      if (!latestEx || !latestEx.endDate) continue;
+
+      const endDate = new Date(latestEx.endDate + "T23:59:59+09:00");
+      const diffDays = Math.floor((now - endDate) / (1000 * 60 * 60 * 24));
+
+      // 終了日翌日以降（1日以上経過）ならグループ解除
+      if (diffDays >= 1) {
+        await db.doc(`spaces/${sub.id}`).update({ mainSpaceId: null });
+      }
+    }
   }
 );
