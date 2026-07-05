@@ -391,6 +391,7 @@
       <div id="queue-preview-area"></div>
       <div class="btn-row">
         <button class="btn btn-success" id="import-btn" onclick="importQueue()" disabled>🎯 展示詳細を取り込む</button>
+        <button class="btn btn-ghost btn-sm" onclick="window.open('/dfg-generator-v17.html', '_blank')">🖨 展示ページ生成ツールを開く</button>
         <button class="btn btn-ghost btn-sm" onclick="clearQueue()">キューをクリア</button>
       </div>
     </div>
@@ -697,8 +698,8 @@ function getFloorFromSpaceNumber(spaceNumber) {
     return 'WEST 1F';
   }
   if (s.includes('EAST')) {
-    if (s.includes('AC3F') || s.match(/EAST\s*3/)) return 'EAST 3F';
-    if (s.includes('AC2F') || s.match(/EAST\s*2/)) return 'EAST 2F';
+    if (s.includes('3F') || s.match(/EAST\s*3/)) return 'EAST 3F';
+    if (s.includes('2F') || s.match(/EAST\s*2/)) return 'EAST 2F';
     return 'EAST 1F';
   }
   return 'その他';
@@ -1379,15 +1380,15 @@ window.initSpaces = async function() {
 
   const initialSpaces = [
     // WEST 1F
-    'WEST 1-A', 'WEST 1-B', 'WEST 1-C', 'WEST 1-D', 'WEST 1-F', 'WEST 1-G', 'WEST AC',
+    'WEST 1-A', 'WEST 1-B', 'WEST 1-C', 'WEST 1-D', 'WEST 1-F', 'WEST 1-G', 'WEST アートコーナー',
     // WEST 2F
     'WEST 2-A', 'WEST 2-B', 'WEST 2-C', 'WEST 2-D',
     // EAST 1F
     'EAST 101', 'EAST 101-a', 'EAST 101-b', 'EAST 102',
     // EAST 2F
-    'EAST 201', 'EAST 202', 'EAST 203', 'EAST 204', 'EAST AC2F',
+    'EAST 201', 'EAST 202', 'EAST 203', 'EAST 204', 'EAST アートコーナー2F',
     // EAST 3F
-    'EAST 301', 'EAST 302', 'EAST 303', 'EAST 304', 'EAST AC3F',
+    'EAST 301', 'EAST 302', 'EAST 303', 'EAST 304', 'EAST アートコーナー3F',
   ];
 
   const existingNumbers = new Set(spaces.map(sp => sp.spaceNumber));
@@ -1777,6 +1778,12 @@ async function executeSingleImport(d, snsArr, spaceNumber, item, selectedSpaceId
       await setDoc(doc(db, 'spaces', selectedSpaceId), updatePayload, { merge: true });
     }
 
+    // 展示ページ生成ツール（dfg-generator）用に生データを保存
+    await addDoc(collection(db, 'generator_pages'), {
+      raw: item.raw || '',
+      createdAt: serverTimestamp(),
+    });
+
     // 取り込み済みにマーク（まだマークされていない場合のみ）
     if (queueDocs.find(q => q.id === item.id)) {
       await updateDoc(doc(db, 'import_queue', item.id), { imported: true });
@@ -1871,11 +1878,11 @@ function renderPwTable() {
   const todayDayIdx = (new Date().getDay() + 6) % 7; // 0=月〜6=日
 
   const spaceOrder = [
-    'WEST 1-A', 'WEST 1-B', 'WEST 1-C', 'WEST 1-D', 'WEST 1-F', 'WEST 1-G', 'WEST AC',
+    'WEST 1-A', 'WEST 1-B', 'WEST 1-C', 'WEST 1-D', 'WEST 1-F', 'WEST 1-G', 'WEST アートコーナー',
     'WEST 2-A', 'WEST 2-B', 'WEST 2-C', 'WEST 2-D',
     'EAST 101', 'EAST 101-a', 'EAST 101-b', 'EAST 102',
-    'EAST 201', 'EAST 202', 'EAST 203', 'EAST 204', 'EAST AC2F',
-    'EAST 301', 'EAST 302', 'EAST 303', 'EAST 304', 'EAST AC3F',
+    'EAST 201', 'EAST 202', 'EAST 203', 'EAST 204', 'EAST アートコーナー2F',
+    'EAST 301', 'EAST 302', 'EAST 303', 'EAST 304', 'EAST アートコーナー3F',
   ];
   const areaSpaces = spaces.filter(sp => getAreaFromSpaceNumberSp(sp.spaceNumber) === currentPwArea)
     .sort((a, b) => {
@@ -1889,11 +1896,11 @@ function renderPwTable() {
     return;
   }
 
-  let html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
-  html += '<thead><tr><th style="padding:8px;text-align:left;border-bottom:2px solid var(--border);min-width:100px;">スペース</th>';
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:15px;">';
+  html += '<thead><tr><th style="padding:10px;text-align:left;border-bottom:2px solid var(--border);min-width:110px;font-size:15px;">スペース</th>';
   DAYS.forEach((day, i) => {
     const isToday = i === todayDayIdx;
-    html += '<th style="padding:8px;text-align:center;border-bottom:2px solid var(--border);min-width:80px;' + (isToday ? 'background:#fff8e0;' : '') + '">' + day + (isToday ? ' 📅' : '') + '</th>';
+    html += '<th style="padding:10px;text-align:center;border-bottom:2px solid var(--border);min-width:88px;font-size:15px;' + (isToday ? 'background:#fff8e0;' : '') + '">' + day + (isToday ? ' 📅' : '') + '</th>';
   });
   html += '</tr></thead><tbody>';
 
@@ -1903,7 +1910,7 @@ function renderPwTable() {
       html += '<tr><td colspan="8" style="padding:0;border:none;"><div style="border-top:2px solid var(--accent);margin:4px 0;"></div></td></tr>';
     }
     html += '<tr style="' + (ri % 2 === 0 ? 'background:var(--bg);' : '') + '">';
-    html += '<td style="padding:8px;font-weight:700;color:var(--accent);border-bottom:1px solid var(--border);">' + escHtml(sp.spaceNumber || sp.id) + '</td>';
+    html += '<td style="padding:10px;font-weight:700;color:var(--accent);border-bottom:1px solid var(--border);font-size:15px;">' + escHtml(sp.spaceNumber || sp.id) + '</td>';
     // 現在開催中の展示のパスワードを取得
     const now = new Date();
     const activeEx = (sp.exhibitions || []).find(ex => {
@@ -1927,9 +1934,9 @@ function renderPwTable() {
       if (isActive) bgStyle = 'background:#d4f0d4;';
       else if (isMismatch) bgStyle = 'background:#ffd5d5;';
       else if (isToday) bgStyle = 'background:#fff8e0;';
-      html += '<td style="padding:4px;border-bottom:1px solid var(--border);' + bgStyle + '">'
+      html += '<td style="padding:6px;border-bottom:1px solid var(--border);' + bgStyle + '">'
         + '<input type="text" value="' + escHtml(val) + '" maxlength="6" '
-        + 'style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:center;font-family:monospace;background:transparent;' + (isActive ? 'font-weight:700;color:#2e7d52;' : isMismatch ? 'color:#c0392b;font-weight:700;' : '') + '" '
+        + 'style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:16px;text-align:center;font-family:monospace;background:transparent;' + (isActive ? 'font-weight:700;color:#2e7d52;' : isMismatch ? 'color:#c0392b;font-weight:700;' : '') + '" '
         + 'onblur="savePwCell(\'' + sp.id + '\',' + '\'' + day + '\'' + ',this)" '
         + 'onkeydown="if(event.key===\'Enter\')this.blur()" />'
         + '</td>';
