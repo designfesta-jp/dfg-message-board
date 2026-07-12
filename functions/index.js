@@ -99,3 +99,35 @@ exports.cleanupExpiredGroups = onSchedule(
     }
   }
 );
+
+
+// 毎日午前3時30分（JST）に、終了後30日以上経過した展示情報を自動整理
+exports.cleanupOldExhibitions = onSchedule(
+  {
+    schedule: "30 3 * * *",
+    timeZone: "Asia/Tokyo",
+    region: "asia-northeast1",
+  },
+  async (event) => {
+    const db = getFirestore();
+    const spacesSnap = await db.collection("spaces").get();
+
+    const now = new Date();
+
+    for (const spaceDoc of spacesSnap.docs) {
+      const spaceData = spaceDoc.data();
+      const exhibitions = spaceData.exhibitions || [];
+
+      const keptExhibitions = exhibitions.filter(ex => {
+        if (!ex.endDate) return true; // 終了日不明なものは念のため残す
+        const endDate = new Date(ex.endDate + "T23:59:59+09:00");
+        const diffDays = Math.floor((now - endDate) / (1000 * 60 * 60 * 24));
+        return diffDays < 30; // 終了後30日未満は残す
+      });
+
+      if (keptExhibitions.length !== exhibitions.length) {
+        await db.doc(`spaces/${spaceDoc.id}`).update({ exhibitions: keptExhibitions });
+      }
+    }
+  }
+);

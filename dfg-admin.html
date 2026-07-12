@@ -997,12 +997,14 @@ const spBoothIndex = {}; // ブースタブインデックス
 window.groupExhibitionsByPeriod = function groupExhibitionsByPeriod(exs) {
   const groups = [];
   exs.forEach(ex => {
+    // startDate/endDateが一致するかでグループ化（periodのテキストは表示用の付随情報が混ざることがあるため使わない）
+    const dateKey = (ex.startDate || '') + '_' + (ex.endDate || '');
     const period = ex.period || '';
-    const existing = groups.find(g => g.period === period);
+    const existing = groups.find(g => g.dateKey === dateKey);
     if (existing) {
       existing.exs.push(ex);
     } else {
-      groups.push({ period, exs: [ex] });
+      groups.push({ dateKey, period, exs: [ex] });
     }
   });
   // 各グループ内のブースをブース名でソート
@@ -1609,6 +1611,7 @@ window.executeBulkImport = async function() {
   closeImportDialog();
   showToast('✓ ' + done + '件を取り込みました');
   await loadSpaces();
+  if (done > 0) window.open('/dfg-generator-v17.html', '_blank');
 };
 
 // ── 取り込みダイアログ ────────────────────────────────────
@@ -1723,13 +1726,30 @@ async function executeSingleImport(d, snsArr, spaceNumber, item, selectedSpaceId
   const { startDate, endDate } = parsePeriodDates(d.period || '');
 
   // 開始日の曜日からパスワードを取得
-  function getAutoPassword(spaceId, startDateStr) {
+  function getAutoPassword(spaceId, startDateStr, boothIndex) {
     if (!startDateStr || !spaceId) return '';
     const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
     const date = new Date(startDateStr + 'T00:00:00+09:00');
     const day = dayNames[date.getDay()];
     const key = spaceId + '_' + day;
-    return passwords[key] || '';
+    const base = passwords[key] || '';
+    if (!base) return '';
+    // ブース分け（boothIndexが1以上）の場合、末尾1文字を番号に差し替える
+    if (boothIndex && boothIndex >= 1) {
+      return base.slice(0, -1) + String(boothIndex);
+    }
+    return base;
+  }
+
+  // スペース内に「終了していない展示」が何件あるかを数える（ブース分け判定用）
+  function countActiveExhibitions(sp) {
+    if (!sp || !sp.exhibitions) return 0;
+    const now = new Date();
+    return sp.exhibitions.filter(ex => {
+      if (!ex.endDate) return true;
+      const endDate = new Date(ex.endDate + 'T23:59:59+09:00');
+      return now <= endDate;
+    }).length;
   }
 
   const newEx = {
@@ -1760,7 +1780,10 @@ async function executeSingleImport(d, snsArr, spaceNumber, item, selectedSpaceId
       // 既存スペースのexhibitions先頭に追加
       const sp = spaces.find(s => s.id === selectedSpaceId);
       const currentExs = sp ? (sp.exhibitions || []) : [];
-      newEx.exhibitorPassword = getAutoPassword(selectedSpaceId, startDate);
+      // ブース分け判定：既に終了していない展示がある場合はboothIndexを付与
+      const activeCount = countActiveExhibitions(sp);
+      const boothIndex = activeCount > 0 ? activeCount + 1 : 0;
+      newEx.exhibitorPassword = getAutoPassword(selectedSpaceId, startDate, boothIndex);
 
       // グループ化の自動解除
       const updatePayload = { exhibitions: [newEx, ...currentExs] };
@@ -1825,6 +1848,7 @@ window.executeImport = async function(queueItemId) {
     await loadSpaces();
     updateSelects();
     switchTab('tab-spaces');
+    window.open('/dfg-generator-v17.html', '_blank');
   }
 };
 
@@ -1896,6 +1920,42 @@ function renderPwTable() {
     return;
   }
 
+  // ブース分けスペースの一覧セクション
+  const now0 = new Date();
+  const boothSplitSpaces = areaSpaces.filter(sp => {
+    const activeExs = (sp.exhibitions || []).filter(ex => {
+      if (!ex.startDate || !ex.endDate) return false;
+      const e = new Date(ex.endDate + 'T23:59:59+09:00');
+      return now0 <= e;
+    });
+    return activeExs.length >= 2;
+  });
+
+  let boothHtml = '';
+  if (boothSplitSpaces.length > 0) {
+    boothHtml = '<div style="margin-bottom:18px;padding:14px;background:#dceaf7;border-radius:8px;">'
+      + '<div style="font-weight:700;color:#2a5f8f;margin-bottom:10px;font-size:15px;">🔀 ブース分け中のスペース</div>';
+    boothSplitSpaces.forEach(sp => {
+      const activeExs = (sp.exhibitions || []).filter(ex => {
+        if (!ex.startDate || !ex.endDate) return false;
+        const e = new Date(ex.endDate + 'T23:59:59+09:00');
+        return now0 <= e;
+      });
+      boothHtml += '<div style="margin-bottom:10px;">'
+        + '<div style="font-weight:700;color:var(--accent);font-size:14px;margin-bottom:4px;">' + escHtml(sp.spaceNumber || sp.id) + '</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">';
+      activeExs.forEach(ex => {
+        const nameEsc = escHtml(ex.name || '（無題）');
+        boothHtml += '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 8px;background:#fff;border-radius:4px;font-size:12px;overflow:hidden;">'
+          + '<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + nameEsc + '">' + nameEsc + '</span>'
+          + '<span style="font-family:monospace;font-weight:700;color:#2a5f8f;flex-shrink:0;">' + escHtml(ex.exhibitorPassword || '未設定') + '</span>'
+          + '</div>';
+      });
+      boothHtml += '</div></div>';
+    });
+    boothHtml += '</div>';
+  }
+
   let html = '<table style="width:100%;border-collapse:collapse;font-size:15px;">';
   html += '<thead><tr><th style="padding:10px;text-align:left;border-bottom:2px solid var(--border);min-width:110px;font-size:15px;">スペース</th>';
   DAYS.forEach((day, i) => {
@@ -1909,30 +1969,33 @@ function renderPwTable() {
     if (spacerBefore.includes(sp.spaceNumber)) {
       html += '<tr><td colspan="8" style="padding:0;border:none;"><div style="border-top:2px solid var(--accent);margin:4px 0;"></div></td></tr>';
     }
-    html += '<tr style="' + (ri % 2 === 0 ? 'background:var(--bg);' : '') + '">';
-    html += '<td style="padding:10px;font-weight:700;color:var(--accent);border-bottom:1px solid var(--border);font-size:15px;">' + escHtml(sp.spaceNumber || sp.id) + '</td>';
-    // 現在開催中の展示のパスワードを取得
+    // 現在終了していない展示を全て取得（ブース分け対応）
     const now = new Date();
-    const activeEx = (sp.exhibitions || []).find(ex => {
+    const activeExs = (sp.exhibitions || []).filter(ex => {
       if (!ex.startDate || !ex.endDate) return false;
       const e = new Date(ex.endDate + 'T23:59:59+09:00');
-      return now <= e; // 終了日前なら全てハイライト対象（開催前・開催中）
+      return now <= e;
     });
-    const activePw = activeEx?.exhibitorPassword || '';
+    const isBoothSplit = activeExs.length >= 2;
+    const activePws = activeExs.map(ex => ex.exhibitorPassword).filter(Boolean);
+
+    html += '<tr style="' + (isBoothSplit ? 'background:#dceaf7;' : (ri % 2 === 0 ? 'background:var(--bg);' : '')) + '">';
+    html += '<td style="padding:10px;font-weight:700;color:var(--accent);border-bottom:1px solid var(--border);font-size:15px;">' + escHtml(sp.spaceNumber || sp.id) + (isBoothSplit ? ' <span style="font-size:11px;color:#2a5f8f;">（ブース分け）</span>' : '') + '</td>';
 
     DAYS.forEach((day, i) => {
       const key = sp.id + '_' + day;
       const val = passwords[key] || '';
       const isToday = i === todayDayIdx;
-      const isActive = activePw && val && activePw === val;
-      // 開始日の曜日を特定
+      const isActive = activePws.includes(val) && !!val;
+      // いずれかの展示の開始日の曜日と一致するか（不一致判定用）
       const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
-      const startDayName = activeEx?.startDate ? dayNames[new Date(activeEx.startDate + 'T00:00:00+09:00').getDay()] : null;
-      const isStartDay = day === startDayName;
-      const isMismatch = activePw && isStartDay && !isActive;
+      const startDayNames = activeExs.map(ex => ex.startDate ? dayNames[new Date(ex.startDate + 'T00:00:00+09:00').getDay()] : null);
+      const isStartDay = startDayNames.includes(day);
+      const isMismatch = activePws.length > 0 && isStartDay && !isActive;
       let bgStyle = '';
       if (isActive) bgStyle = 'background:#d4f0d4;';
       else if (isMismatch) bgStyle = 'background:#ffd5d5;';
+      else if (isBoothSplit) bgStyle = 'background:#dceaf7;';
       else if (isToday) bgStyle = 'background:#fff8e0;';
       html += '<td style="padding:6px;border-bottom:1px solid var(--border);' + bgStyle + '">'
         + '<input type="text" value="' + escHtml(val) + '" maxlength="6" '
@@ -1945,7 +2008,16 @@ function renderPwTable() {
   });
 
   html += '</tbody></table>';
-  container.innerHTML = html;
+  html += boothHtml;
+
+  const legend = '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:18px;padding:14px;background:var(--bg);border-radius:8px;font-size:14px;color:var(--text-mid);">'
+    + '<div style="display:flex;align-items:center;gap:8px;"><span style="width:20px;height:20px;background:#fff8e0;border:1px solid var(--border);border-radius:4px;display:inline-block;"></span>本日</div>'
+    + '<div style="display:flex;align-items:center;gap:8px;"><span style="width:20px;height:20px;background:#d4f0d4;border:1px solid var(--border);border-radius:4px;display:inline-block;"></span>反映済み（展示に設定中）</div>'
+    + '<div style="display:flex;align-items:center;gap:8px;"><span style="width:20px;height:20px;background:#ffd5d5;border:1px solid var(--border);border-radius:4px;display:inline-block;"></span>不一致（開始日の曜日なのに未反映）</div>'
+    + '<div style="display:flex;align-items:center;gap:8px;"><span style="width:20px;height:20px;background:#dceaf7;border:1px solid var(--border);border-radius:4px;display:inline-block;"></span>ブース分け中（同一スペースに複数展示）</div>'
+    + '</div>';
+
+  container.innerHTML = html + legend;
   setTimeout(initPwTableHighlight, 0);
 }
 

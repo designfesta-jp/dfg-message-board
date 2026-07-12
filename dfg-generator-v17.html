@@ -32,14 +32,24 @@ window._generatorDoc = doc;
 // docId が一致するページについて維持する
 const q = query(collection(_db, 'generator_pages'), orderBy('createdAt', 'asc'));
 onSnapshot(q, snap => {
-  console.log('[DEBUG] onSnapshot fired at', new Date().toISOString());
   const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  // 日付が変わった（今日取り込まれたものではない）ページは自動削除する
+  const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }); // YYYY-MM-DD形式
+  const expiredDocs = docs.filter(item => {
+    if (!item.createdAt || !item.createdAt.toDate) return false;
+    const createdDateStr = item.createdAt.toDate().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+    return createdDateStr !== todayStr;
+  });
+  expiredDocs.forEach(item => deleteDoc(doc(_db, 'generator_pages', item.id)));
+
+  const validDocs = docs.filter(item => !expiredDocs.includes(item));
 
   const prevByDocId = {};
   (window._pages || []).forEach(p => { if (p.docId) prevByDocId[p.docId] = p; });
 
   window._pages.length = 0;
-  docs.forEach(item => {
+  validDocs.forEach(item => {
     const prev = prevByDocId[item.id];
     if (prev) {
       window._pages.push(prev);
