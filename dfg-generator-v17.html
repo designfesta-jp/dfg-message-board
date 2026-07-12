@@ -9,7 +9,7 @@
 <script type="module">
 // Firebase設定
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
-import { getFirestore, collection, deleteDoc, doc, onSnapshot, orderBy, query }
+import { getFirestore, collection, deleteDoc, doc, onSnapshot, orderBy, query, getDocs, where, addDoc, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -66,6 +66,42 @@ onSnapshot(q, snap => {
 
   window._renderAll();
 });
+
+// import_queueから直接取り込む（dfg-adminを経由しない単独運用向け）
+async function fetchImportQueue() {
+  const snap = await getDocs(query(collection(_db, 'import_queue'), where('imported', '==', false), orderBy('createdAt', 'asc')));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+window.importFromQueueDirectly = async function() {
+  try {
+    const queueDocs = await fetchImportQueue();
+    if (queueDocs.length === 0) { alert('キューにデータがありません'); return; }
+    for (const item of queueDocs) {
+      await addDoc(collection(_db, 'generator_pages'), {
+        raw: item.raw || '',
+        createdAt: serverTimestamp(),
+      });
+      await deleteDoc(doc(_db, 'import_queue', item.id));
+    }
+    alert(queueDocs.length + '件取り込みました');
+  } catch(e) {
+    console.error(e);
+    alert('取り込みに失敗しました: ' + e.message);
+  }
+};
+
+async function updateQueueBtn17() {
+  try {
+    const queueDocs = await fetchImportQueue();
+    const btn = document.getElementById('btnQueueDirect');
+    if (btn) {
+      btn.textContent = '📥 ブックマークキューから取り込む（' + queueDocs.length + '件）';
+    }
+  } catch(e) {}
+}
+updateQueueBtn17();
+setInterval(updateQueueBtn17, 5000);
 
 // Firestoreからページのドキュメントを削除（×ボタン・印刷後の自動削除で使用）
 window.deleteGeneratorPageDoc = async function(docId) {
@@ -730,6 +766,7 @@ label { font-size: 11px; letter-spacing: 0.1em; color: #aaa; display: block; mar
       <p>DESIGN FESTA GALLERY — 展示ページ生成ツール</p>
     </div>
     <div style="font-size:11px;color:#4a9;letter-spacing:0.05em;padding:8px 0;">🔄 DFGメッセージボードで取り込んだ展示が自動的に表示されます</div>
+    <button id="btnQueueDirect" onclick="importFromQueueDirectly()" style="width:100%;padding:8px;background:#2a4a3a;border:1px solid #3a6a4a;color:#8fd;font-size:12px;border-radius:4px;cursor:pointer;margin-bottom:8px;">📥 ブックマークキューから取り込む</button>
     <details style="margin-top:2px;">
       <summary style="font-size:11px;color:#aaa;cursor:pointer;letter-spacing:0.08em;list-style:none;padding:3px 0;">🔖 ブックマークレット（最新版）</summary>
       <textarea id="bookmarkletCode" readonly style="width:100%;height:60px;margin-top:6px;background:#0a0a0a;color:#4a9;border:1px solid #2a2a2a;border-radius:3px;font-size:9px;padding:6px;resize:none;font-family:monospace;line-height:1.4;" onclick="this.select()"></textarea>
