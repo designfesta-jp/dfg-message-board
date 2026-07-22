@@ -370,7 +370,7 @@
       <button class="btn btn-ghost btn-sm" onclick="initSpaces()">🏛 初期スペースを作成</button>
       <button class="btn btn-ghost btn-sm" id="group-mode-btn" onclick="toggleGroupMode()">🔗 グループ化モード</button>
       <button class="btn btn-danger btn-sm" id="sp-delete-toggle-btn" onclick="enableSpaceDelete()" style="color:#fff;">🗑 スペース削除を有効化</button>
-      <button class="btn btn-danger btn-sm" onclick="resetAllTestData()" style="color:#fff;background:#8b2020;">🧹 全展示・全メッセージを削除（本番前リセット）</button>
+      <button class="btn btn-danger btn-sm" id="reset-test-data-btn" onclick="resetAllTestData()" style="color:#fff;background:#8b2020;display:none;">🧹 全展示・全メッセージを削除（本番前リセット）</button>
       </div>
       <div id="group-mode-actions" style="display:none;margin-top:10px;display:none;gap:8px;justify-content:center;">
         <span style="font-size:12px;color:var(--text-mid);align-self:center;">スペースを選択してグループ化</span>
@@ -1339,6 +1339,30 @@ window.ungroupSpace = async function(spId) {
   showToast('グループを解除しました');
   await loadSpaces();
 };
+
+// 隠しコマンド：「reset」とタイプすると5秒間だけリセットボタンを表示する
+(function() {
+  let buffer = '';
+  let hideTimer = null;
+  document.addEventListener('keydown', (e) => {
+    // 入力欄にフォーカスしている時は無視
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+    buffer += e.key.toLowerCase();
+    if (buffer.length > 5) buffer = buffer.slice(-5);
+
+    if (buffer === 'reset') {
+      const btn = document.getElementById('reset-test-data-btn');
+      if (btn) {
+        btn.style.display = '';
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(() => { btn.style.display = 'none'; }, 5000);
+      }
+      buffer = '';
+    }
+  });
+})();
 
 window.resetAllTestData = async function() {
   if (!confirm('全スペースの展示情報と全メッセージを削除します。\nこの操作は取り消せません。\n本当に実行しますか？')) return;
