@@ -70,8 +70,9 @@ function buildRow(ex) {
   const cls   = statusMap[st]   || 'highlight-planning';
   const icon  = iconMap[st]     || iconMap['企画中'];
   const month = getMonth(ex.startDate);
+  // 会期：初日を1行目、最終日を2行目に(横幅をコンパクトにするため)
   const period = ex.startDate && ex.endDate
-    ? fmtDate(ex.startDate) + '~' + fmtDate(ex.endDate)
+    ? fmtDate(ex.startDate) + '<br>〜' + fmtDate(ex.endDate)
     : '—';
   const detail = 'スペース: ' + (ex.space || '—') + '<br>'
     + 'ブース数: ' + (ex.booths || '—') + '<br>'
@@ -86,7 +87,7 @@ function buildRow(ex) {
     + '</td>'
     + '<td class="has-text-align-center" data-align="center">' + month + '</td>'
     + '<td class="has-text-align-center" data-align="center">' + (ex.title || '—') + '</td>'
-    + '<td>' + period + '</td>'
+    + '<td class="has-text-align-center" data-align="center">' + period + '</td>'
     + '<td class="has-text-align-center" data-align="center">' + detail + '</td>'
     + '<td class="has-text-align-center" data-align="center">' + linkBtn + '</td>'
     + '</tr>';
@@ -105,7 +106,7 @@ function buildTable(year, rows) {
     + '<th class="has-text-align-center">ステータス</th>'
     + '<th class="has-text-align-center">開催月</th>'
     + '<th class="has-text-align-center">タイトル・テーマ</th>'
-    + '<th>会期</th>'
+    + '<th class="has-text-align-center">会期</th>'
     + '<th class="has-text-align-center">詳細</th>'
     + '<th class="has-text-align-center">募集要項</th>'
     + '</tr></thead><tbody>'
