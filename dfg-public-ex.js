@@ -80,8 +80,11 @@ function buildRow(ex) {
   const linkBtn = ex.recruitUrl
     ? '<button class="link-button" data-url="' + ex.recruitUrl + '">リンク</button>'
     : '<button class="link-button" disabled>リンク</button>';
+  // スタンプ(残りわずか/満員御礼)は募集中の演出なので、
+  // 開催中・終了になったら自動で非表示にする
+  const stampVal = (st === '開催中' || st === '終　了') ? '' : (ex.stamp || '');
 
-  return '<tr class="collapsible-row ' + cls + '" data-stamp="' + (ex.stamp || '') + '">'
+  return '<tr class="collapsible-row ' + cls + '" data-stamp="' + stampVal + '">'
     + '<td class="has-text-align-center" data-align="center">'
     +   '<div class="icon-title">' + icon + '<span class="status-title">' + st + '</span></div>'
     + '</td>'
