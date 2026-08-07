@@ -674,8 +674,20 @@ async function loadNgwords() {
   } catch(e) { ngwords = []; }
 }
 
+// ひらがな⇔カタカナを正規化（カタカナに統一）
+function normalizeKana(str) {
+  return str.replace(/[\u3041-\u3096]/g, ch =>
+    String.fromCharCode(ch.charCodeAt(0) + 0x60)
+  );
+}
+
 function checkNgwords(text) {
-  return ngwords.find(w => w && text.includes(w)) || null;
+  const normalizedText = normalizeKana(text).toLowerCase();
+  return ngwords.find(w => {
+    if (!w) return false;
+    const normalizedWord = normalizeKana(w).toLowerCase();
+    return normalizedText.includes(normalizedWord);
+  }) || null;
 }
 
 async function reportNgword(text, detected, type) {

@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DFG 展示ページ生成ツール v17</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;600&family=Noto+Sans+JP:wght@300;400;500;700&family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=M+PLUS+Rounded+1c:wght@400;700;800&family=BIZ+UDMincho&family=Zen+Old+Mincho:wght@400;700&family=RocknRoll+One&family=Kaisei+Opti&family=Cinzel:wght@400;600;700&family=Special+Elite&family=Rubik+Mono+One&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script type="module">
+// Firebase設定
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+import { getFirestore, collection, deleteDoc, doc, onSnapshot, orderBy, query, getDocs, where, addDoc, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAFdBPTqPUwHALpFYxy1L-XgxaFcHJpKrI",
+  authDomain: "dfg-message-board.firebaseapp.com",
+  projectId: "dfg-message-board",
+  storageBucket: "dfg-message-board.firebasestorage.app",
+  messagingSenderId: "257856032842",
+  appId: "1:257856032842:web:07ff7a53077326845f96b3"
+};
+const _app = initializeApp(firebaseConfig);
+const _db  = getFirestore(_app);
+
+window._generatorDb = _db;
+window._generatorDeleteDoc = deleteDoc;
+window._generatorDoc = doc;
+
+// generator_pages をリアルタイム購読し、常に最新の状態に同期する
+// 各ページには Firestore の docId を保持し、既存の手動編集内容（テーマ・向き・本文サイズ）は
+// docId が一致するページについて維持する
+const q = query(collection(_db, 'generator_pages'), orderBy('createdAt', 'asc'));
+onSnapshot(q, snap => {
+  const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  // 日付が変わった（今日取り込まれたものではない）ページは自動削除する
+  const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }); // YYYY-MM-DD形式
+  const expiredDocs = docs.filter(item => {
+    if (!item.createdAt || !item.createdAt.toDate) return false;
+    const createdDateStr = item.createdAt.toDate().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+    return createdDateStr !== todayStr;
+  });
+  expiredDocs.forEach(item => deleteDoc(doc(_db, 'generator_pages', item.id)));
+
+  const validDocs = docs.filter(item => !expiredDocs.includes(item));
+
+  const prevByDocId = {};
+  (window._pages || []).forEach(p => { if (p.docId) prevByDocId[p.docId] = p; });
+
+  window._pages.length = 0;
+  validDocs.forEach(item => {
+    const prev = prevByDocId[item.id];
+    if (prev) {
+      window._pages.push(prev);
+    } else {
+      window._pages.push({
+        docId: item.id,
+        data: window._parseText(item.raw || ''),
+        theme: 'default',
+        orient: 'landscape',
+        bodySize: null,
+      });
+    }
+  });
+
+  window._renderAll();
+});
+
+// import_queueから直接取り込む（dfg-adminを経由しない単独運用向け）
+async function fetchImportQueue() {
+  const snap = await getDocs(query(collection(_db, 'import_queue'), where('imported', '==', false), orderBy('createdAt', 'asc')));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+window.importFromQueueDirectly = async function() {
+  try {
+    const queueDocs = await fetchImportQueue();
+    if (queueDocs.length === 0) { alert('キューにデータがありません'); return; }
+    for (const item of queueDocs) {
+      await addDoc(collection(_db, 'generator_pages'), {
+        raw: item.raw || '',
+        createdAt: serverTimestamp(),
+      });
+      await deleteDoc(doc(_db, 'import_queue', item.id));
+    }
+    alert(queueDocs.length + '件取り込みました');
+  } catch(e) {
+    console.error(e);
+    alert('取り込みに失敗しました: ' + e.message);
+  }
+};
+
+async function updateQueueBtn17() {
+  try {
+    const queueDocs = await fetchImportQueue();
+    const btn = document.getElementById('btnQueueDirect');
+    if (btn) {
+      btn.textContent = '📥 ブックマークキューから取り込む（' + queueDocs.length + '件）';
+    }
+  } catch(e) {}
+}
+updateQueueBtn17();
+setInterval(updateQueueBtn17, 5000);
+
+// Firestoreからページのドキュメントを削除（×ボタン・印刷後の自動削除で使用）
+window.deleteGeneratorPageDoc = async function(docId) {
+  if (!docId) return;
+  try {
+    await deleteDoc(doc(_db, 'generator_pages', docId));
+  } catch(e) { console.error(e); }
+};
+</script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Noto Sans JP', sans-serif; background: #e8e4dd; color: #1a1a1a; min-height: 100vh; --long-body-size: 13px; }
+#app { display: grid; grid-template-columns: var(--sidebar-w, 420px) 4px 1fr; min-height: 100vh; }
+#sidebar-resizer { background: #111; cursor: col-resize; transition: background 0.15s; position: relative; z-index: 20; }
+#sidebar-resizer:hover, #sidebar-resizer.dragging { background: #c8a96e; }
+
+#editor-panel { background: #1a1a1a; color: #e0dbd3; padding: 24px 20px; display: flex; flex-direction: column; gap: 12px; position: sticky; top: 0; height: 100vh; overflow: hidden; }
+.editor-header { border-bottom: 1px solid #3a3a3a; padding-bottom: 12px; flex-shrink: 0; }
+.editor-header h1 { font-family: 'EB Garamond', serif; font-size: 21px; font-weight: 400; letter-spacing: 0.05em; color: #c8a96e; margin-bottom: 2px; }
+.editor-header p { font-size: 11px; color: #888; letter-spacing: 0.08em; }
+label { font-size: 11px; letter-spacing: 0.1em; color: #aaa; display: block; margin-bottom: 4px; text-transform: uppercase; }
+.btn-queue { width: 100%; padding: 12px; background: #c8a96e; color: #1a1a1a; border: none; border-radius: 4px; font-size: 14px; font-weight: 500; letter-spacing: 0.08em; cursor: pointer; transition: opacity 0.2s, transform 0.1s; flex-shrink: 0; }
+.btn-queue:hover { opacity: 0.85; }
+.btn-queue:active { transform: scale(0.98); }
+.btn-queue.has-items { background: #4a9; color: #fff; }
+.divider { border: none; border-top: 1px solid #2a2a2a; flex-shrink: 0; }
+.list-header { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+.page-count { font-size: 11px; color: #aaa; }
+#editor-panel > *:not(#pageList) { flex-shrink: 0; }
+#pageList { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; flex: 1; min-height: 0; }
+.page-list-item { background: #111; border: 1px solid #2a2a2a; border-radius: 4px; overflow: hidden; transition: border-color 0.2s; flex-shrink: 0; }
+.item-main-row { padding: 9px 10px; display: flex; align-items: center; gap: 7px; cursor: pointer; }
+.item-main-row:hover { background: #161616; }
+.page-list-item.active-item { border-color: #c8a96e; }
+.page-list-num { font-family: 'EB Garamond', serif; font-size: 20px; color: #666; flex-shrink: 0; width: 22px; text-align: center; }
+.page-list-info { flex: 1; min-width: 0; }
+.page-list-title { font-size: 12px; color: #e0dbd3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.page-list-sub { font-size: 11px; color: #888; margin-top: 2px; }
+.item-theme-switcher { display: flex; gap: 4px; padding: 0 10px 8px; align-items: center; flex-wrap: wrap; }
+.theme-switch-label { font-size: 11px; color: #aaa; white-space: nowrap; flex-shrink: 0; width: 100%; margin-bottom: 2px; letter-spacing: 0.08em; }
+.theme-mini-row { display: flex; gap: 3px; width: 100%; }
+.theme-mini-btn { flex: 1; padding: 4px 2px; background: #0a0a0a; border: 1px solid #2a2a2a; border-radius: 3px; color: #aaa; font-size: 11px; cursor: pointer; transition: all 0.15s; text-align: center; }
+.theme-mini-btn:hover { border-color: #888; color: #e0dbd3; }
+.theme-mini-btn.active-theme { border-color: #c8a96e; color: #c8a96e; background: #1f1a10; }
+.btn-delete { background: none; border: none; color: #555; cursor: pointer; font-size: 17px; padding: 0 3px; flex-shrink: 0; line-height: 1; transition: color 0.2s; }
+.btn-delete:hover { color: #e05; }
+.empty-list { font-size: 12px; color: #555; text-align: center; padding: 16px 0; }
+.orient-toggle { display: flex; gap: 3px; margin-top: 3px; width: 100%; }
+.orient-btn { flex: 1; padding: 4px 4px; background: #0a0a0a; border: 1px solid #2a2a2a; border-radius: 3px; color: #aaa; font-size: 11px; cursor: pointer; transition: all 0.15s; text-align: center; letter-spacing: 0.05em; }
+.orient-btn:hover { border-color: #888; color: #e0dbd3; }
+.orient-btn.active-orient { border-color: #4a8; color: #4a8; background: #0a1a0a; }
+
+/* members list */
+.members-list { display: flex; flex-wrap: wrap; gap: 1.5mm 2mm; margin-top: 1.5mm; }
+.member-tag { font-size: 7.5px; line-height: 1.4; opacity: 0.85; }
+.member-tag::after { content: '/'; margin-left: 2mm; opacity: 0.35; }
+.member-tag:last-child::after { content: ''; }
+
+/* QR code */
+.qr-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 1mm; margin-top: 1.5mm; }
+.qr-wrap canvas, .qr-wrap img { width: 16mm !important; height: 16mm !important; display: block; }
+.qr-label { display: none; }
+
+/* multi-space badge variants */
+.sp-val-sm { font-family: 'EB Garamond', serif; font-size: 14px; line-height: 1.3; text-align: right; }
+.sp-val-grid { display: flex; flex-wrap: wrap; gap: 1.5px; justify-content: flex-end; max-width: 22mm; }
+.sp-val-grid span { font-family: 'EB Garamond', serif; font-size: 11px; line-height: 1.4; white-space: nowrap; }
+.sp-val-grid span::after { content: ','; margin-right: 1.5px; }
+.sp-val-grid span:last-child::after { content: ''; }
+.sp-count { font-family: 'EB Garamond', serif; font-size: 15px; line-height: 1.1; text-align: right; }
+.sp-count-zone { font-size: 8px; letter-spacing: 0.12em; text-align: right; margin-top: 0.5mm; opacity: 0.7; text-transform: uppercase; }
+
+/* ===== RIGHT PANEL ===== */
+#preview-panel { padding: 32px; display: flex; flex-direction: column; gap: 24px; align-items: center; }
+#pageContainer { display: flex; flex-direction: column; gap: 3px; align-items: center; }
+.preview-toolbar { display: flex; gap: 10px; align-self: flex-end; align-items: center; position: sticky; top: 16px; z-index: 10; }
+.page-counter-badge { font-size: 11px; color: #8a7f72; background: rgba(231,228,221,0.92); padding: 6px 12px; border-radius: 3px; backdrop-filter: blur(4px); }
+.translate-hint { font-size: 10px; color: #8a7f72; background: rgba(231,228,221,0.92); padding: 6px 12px; border-radius: 3px; backdrop-filter: blur(4px); }
+.btn-print { padding: 8px 20px; background: #1a1a1a; border: none; border-radius: 3px; font-size: 12px; color: #e0dbd3; cursor: pointer; transition: opacity 0.2s; }
+.btn-print:hover { opacity: 0.8; }
+
+/* ===== A4 LANDSCAPE WRAPPER ===== */
+.a4-sheet {
+  width: 297mm;
+  height: 210mm;
+  display: flex;
+  flex-direction: row;
+  box-shadow: 0 4px 40px rgba(0,0,0,0.18);
+  page-break-after: always;
+  overflow: hidden;
+}
+
+/* ===== A5 PAGE (each half) ===== */
+.a5-page {
+  width: 148.5mm;
+  height: 210mm;
+  position: relative;
+  padding: 12mm 12mm 10mm;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+/* divider between JA and EN */
+.a5-divider {
+  width: 0.5px;
+  height: 210mm;
+  background: #d4cfc8;
+  flex-shrink: 0;
+}
+
+/* ===== A4 PORTRAIT SHEET ===== */
+.a4-sheet-portrait {
+  width: 210mm;
+  height: 297mm;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 40px rgba(0,0,0,0.18);
+  page-break-after: always;
+  overflow: hidden;
+}
+
+/* A5 landscape (横長半面) */
+.a5-land {
+  width: 210mm;
+  height: 148.5mm;
+  position: relative;
+  padding: 10mm 12mm 9mm;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+/* 縦向きシートの仕切り */
+.a5-divider-h {
+  width: 210mm;
+  height: 0.5px;
+  background: #d4cfc8;
+  flex-shrink: 0;
+}
+
+/* 縦向きシートではページ方向マーク */
+.orient-badge {
+  display: inline-block;
+  font-size: 8px;
+  padding: 1px 5px;
+  border-radius: 2px;
+  margin-left: 4px;
+  vertical-align: middle;
+  background: #222;
+  color: #666;
+  letter-spacing: 0.05em;
+}
+.orient-badge.portrait { background: #1a2a1a; color: #4a8; }
+
+/* 向き切替ボタン */
+.orient-toggle { display: flex; gap: 3px; margin-top: 3px; }
+.orient-btn { flex: 1; padding: 3px 4px; background: #0a0a0a; border: 1px solid #2a2a2a; border-radius: 3px; color: #444; font-size: 9px; cursor: pointer; transition: all 0.15s; text-align: center; letter-spacing: 0.05em; }
+.orient-btn:hover { border-color: #555; color: #aaa; }
+.orient-btn.active-orient { border-color: #4a8; color: #4a8; background: #0a1a0a; }
+
+
+.theme-default .a5-page { background: #f7f4ef; }
+.theme-default .a5-ja::before { content: ''; position: absolute; top: 0; left: 0; width: 24mm; height: 24mm; border-top: 1.5px solid #c8a96e; border-left: 1.5px solid #c8a96e; opacity: 0.4; }
+.theme-default .a5-en::after { content: ''; position: absolute; bottom: 0; right: 0; width: 24mm; height: 24mm; border-bottom: 1.5px solid #c8a96e; border-right: 1.5px solid #c8a96e; opacity: 0.4; }
+.theme-default .pg-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 5mm; padding-bottom: 3mm; border-bottom: 0.5px solid #d4cfc8; }
+.theme-default .g-logo { font-family: 'EB Garamond', serif; font-size: 8.5px; letter-spacing: 0.18em; color: #8a7f72; text-transform: uppercase; }
+.theme-default .g-logo span { display: block; font-size: 9px; margin-top: 1px; opacity: 0.6; }
+.theme-default .pg-num { font-size: 10px; color: #8a7f72; text-align: right; line-height: 1.8; }
+.theme-default .lang-badge { font-size: 9px; letter-spacing: 0.15em; color: #c8a96e; font-family: 'EB Garamond', serif; text-transform: uppercase; }
+.theme-default .ttl-block { margin-bottom: 5mm; }
+.theme-default .ex-label { font-family: 'EB Garamond', serif; font-size: 9px; letter-spacing: 0.22em; color: #c8a96e; text-transform: uppercase; margin-bottom: 2mm; }
+.theme-default .ex-title { font-family: 'Noto Serif JP', serif; font-size: 20px; font-weight: 300; line-height: 1.4; color: #1a1a1a; letter-spacing: 0.06em; }
+.theme-default .ttl-line { width: 14mm; height: 1px; background: #c8a96e; margin-top: 3mm; }
+.theme-default .sec-head { font-family: 'EB Garamond', serif; font-size: 9px; letter-spacing: 0.18em; color: #c8a96e; text-transform: uppercase; margin-bottom: 2.5mm; display: flex; align-items: center; gap: 6px; }
+.theme-default .sec-head::after { content: ''; flex: 1; height: 0.5px; background: #d4cfc8; }
+.theme-default .info-sec { margin-bottom: 4.5mm; }
+.theme-default .info-grid { display: grid; grid-template-columns: 20mm 1fr; }
+.theme-default .i-key { font-size: 10px; color: #8a7f72; padding: 1.8mm 0; border-bottom: 0.5px solid #d4cfc8; align-self: start; white-space: nowrap; }
+.theme-default .i-val { font-family: 'Noto Serif JP', serif; font-size: 13px; font-weight: 300; color: #1a1a1a; padding: 1.8mm 0 1.8mm 3mm; border-bottom: 0.5px solid #d4cfc8; line-height: 1.6; word-break: break-word; }
+.theme-default .long-sec { margin-bottom: 4mm; }
+.theme-default .long-blk { margin-bottom: 3mm; }
+.theme-default .long-lbl { font-family: 'EB Garamond', serif; font-size: 9px; letter-spacing: 0.18em; color: #c8a96e; text-transform: uppercase; margin-bottom: 1.5mm; display: flex; align-items: center; gap: 6px; }
+.theme-default .long-lbl::after { content: ''; flex: 1; height: 0.5px; background: #d4cfc8; }
+.theme-default .long-body { font-family: 'Noto Serif JP', serif; font-size: var(--long-body-size, 13px); line-height: 1.9; color: #1a1a1a; font-weight: 300; padding-left: 2.5mm; border-left: 1px solid #d4cfc8; word-break: break-word; }
+.theme-default .art-sec { margin-top: auto; padding-top: 3.5mm; border-top: 0.5px solid #d4cfc8; }
+.theme-default .art-inner { display: flex; justify-content: space-between; align-items: flex-end; gap: 5mm; }
+.theme-default .art-inner > div:first-child { flex: 1; min-width: 0; }
+.theme-default .art-name { font-family: 'EB Garamond', serif; font-size: 17px; color: #1a1a1a; margin-bottom: 1.5mm; }
+.theme-default .art-meta { font-size: 7.5px; color: #8a7f72; line-height: 1.7; word-break: break-all; }
+.theme-default .art-meta a { color: #c8a96e; text-decoration: none; font-size: 9px; }
+.theme-default .sp-badge { text-align: right; flex-shrink: 0; }
+.theme-default .sp-lbl { font-size: 6.5px; letter-spacing: 0.18em; color: #8a7f72; text-transform: uppercase; margin-bottom: 0.5mm; }
+.theme-default .sp-val { font-family: 'EB Garamond', serif; font-size: 24px; color: #1a1a1a; line-height: 1; }
+.theme-default .sp-floor { font-size: 10px; color: #8a7f72; text-align: right; }
+
+/* ===================== THEME: POP ===================== */
+.theme-pop .a5-page { background: #fff; }
+.theme-pop .pop-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.theme-pop .pop-content { position: relative; z-index: 1; display: flex; flex-direction: column; height: 100%; }
+.theme-pop .pg-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5mm; padding-bottom: 2.5mm; }
+.theme-pop .g-logo { font-family: 'M PLUS Rounded 1c', sans-serif; font-size: 11px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+.theme-pop .pg-num { font-family: 'M PLUS Rounded 1c', sans-serif; font-size: 11px; font-weight: 700; text-align: right; }
+.theme-pop .lang-badge { font-size: 9px; font-weight: 700; }
+.theme-pop .ttl-block { margin-bottom: 5mm; padding: 3mm 4mm; }
+.theme-pop .ex-label { font-family: 'M PLUS Rounded 1c', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; margin-bottom: 1.5mm; }
+.theme-pop .ex-title { font-family: 'M PLUS Rounded 1c', sans-serif; font-size: 20px; font-weight: 800; line-height: 1.3; color: #1a1a1a; }
+.theme-pop .ttl-line { display: none; }
+.theme-pop .sec-head { font-family: 'M PLUS Rounded 1c', sans-serif; font-size: 10px; font-weight: 800; display: inline-flex; padding: 1mm 4mm; border-radius: 20px; margin-bottom: 2.5mm; color: #fff; }
+.theme-pop .sec-head::after { display: none; }
+.theme-pop .info-sec { margin-bottom: 4mm; }
+.theme-pop .info-grid { display: grid; grid-template-columns: 20mm 1fr; }
+.theme-pop .i-key { font-family: 'M PLUS Rounded 1c', sans-serif; font-size: 10px; font-weight: 700; padding: 1.8mm 0; align-self: start; white-space: nowrap; }
+.theme-pop .i-val { font-family: 'M PLUS Rounded 1c', sans-serif; font-size: 13px; color: #1a1a1a; padding: 1.8mm 0 1.8mm 3mm; word-break: break-word; line-height: 1.5; }
+.theme-pop .long-sec { margin-bottom: 4mm; }
+.theme-pop .long-blk { margin-bottom: 3mm; }
+.theme-pop .long-lbl { font-family: 'M PLUS Rounded 1c', sans-serif; font-size: 10px; font-weight: 800; display: inline-flex; padding: 1mm 4mm; border-radius: 20px; margin-bottom: 1.5mm; color: #fff; }
+.theme-pop .long-lbl::after { display: none; }
+.theme-pop .long-body { font-family: 'Noto Sans JP', sans-serif; font-size: var(--long-body-size, 13px); line-height: 1.9; color: #333; padding: 2mm 3mm; border-radius: 4px; word-break: break-word; }
+.theme-pop .art-sec { margin-top: auto; padding: 3mm 4mm; border-radius: 6px; }
+.theme-pop .art-inner { display: flex; justify-content: space-between; align-items: flex-end; gap: 4mm; }
+.theme-pop .art-inner > div:first-child { flex: 1; min-width: 0; }
+.theme-pop .art-name { font-family: 'M PLUS Rounded 1c', sans-serif; font-size: 17px; font-weight: 800; color: #1a1a1a; margin-bottom: 1.5mm; }
+.theme-pop .art-meta { font-size: 7.5px; color: #666; line-height: 1.7; word-break: break-all; }
+.theme-pop .art-meta a { text-decoration: none; font-size: 9px; }
+.theme-pop .sp-badge { text-align: right; flex-shrink: 0; }
+.theme-pop .sp-lbl { font-family: 'M PLUS Rounded 1c', sans-serif; font-size: 9px; font-weight: 700; text-transform: uppercase; margin-bottom: 0.5mm; }
+.theme-pop .sp-val { font-family: 'M PLUS Rounded 1c', sans-serif; font-size: 24px; font-weight: 800; line-height: 1; }
+.theme-pop .sp-floor { font-family: 'M PLUS Rounded 1c', sans-serif; font-size: 10px; font-weight: 700; text-align: right; }
+
+/* ===================== THEME: PHOTO ===================== */
+.theme-photo .a5-page { background: #fafafa; }
+.theme-photo .photo-stripe { position: absolute; top: 0; left: 0; right: 0; height: 3.5mm; background: linear-gradient(135deg, #1a1a1a, #3a3a3a); }
+.theme-photo .photo-stripe::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1.5px; background: #c8a96e; opacity: 0.6; }
+.theme-photo .pg-header { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 7mm; margin-bottom: 4.5mm; padding-bottom: 3mm; border-bottom: 0.5px solid #ddd; }
+.theme-photo .a5-land .pg-header { margin-top: 4mm; margin-bottom: 2.5mm; padding-bottom: 2mm; }
+.theme-photo .a5-land .photo-stripe { position: absolute; top: 0; left: 0; right: 0; height: 3.5mm; background: linear-gradient(135deg,#1a1a1a,#3a3a3a); }
+.theme-photo .g-logo { font-family: 'EB Garamond', serif; font-size: 8.5px; letter-spacing: 0.22em; color: #888; text-transform: uppercase; }
+.theme-photo .g-logo span { display: block; font-size: 9px; margin-top: 1px; opacity: 0.5; }
+.theme-photo .pg-num { font-family: 'EB Garamond', serif; font-size: 10px; color: #aaa; text-align: right; line-height: 1.8; }
+.theme-photo .lang-badge { font-size: 9px; letter-spacing: 0.15em; color: #c8a96e; font-family: 'EB Garamond', serif; }
+.theme-photo .ttl-block { margin-bottom: 5mm; padding: 4mm 5mm; position: relative; background: #fff; border: 1px solid #ddd; }
+.theme-photo .ttl-block::before { content: ''; position: absolute; top: 1.5mm; left: 1.5mm; right: 1.5mm; bottom: 1.5mm; border: 0.5px solid #c8a96e; opacity: 0.4; pointer-events: none; }
+.theme-photo .ttl-corner { position: absolute; width: 4mm; height: 4mm; }
+.theme-photo .ttl-corner.tl { top: -1px; left: -1px; border-top: 2px solid #c8a96e; border-left: 2px solid #c8a96e; }
+.theme-photo .ttl-corner.tr { top: -1px; right: -1px; border-top: 2px solid #c8a96e; border-right: 2px solid #c8a96e; }
+.theme-photo .ttl-corner.bl { bottom: -1px; left: -1px; border-bottom: 2px solid #c8a96e; border-left: 2px solid #c8a96e; }
+.theme-photo .ttl-corner.br { bottom: -1px; right: -1px; border-bottom: 2px solid #c8a96e; border-right: 2px solid #c8a96e; }
+.theme-photo .ex-label { font-family: 'EB Garamond', serif; font-size: 9px; letter-spacing: 0.2em; color: #c8a96e; text-transform: uppercase; margin-bottom: 2mm; }
+.theme-photo .ex-title { font-family: 'Noto Serif JP', serif; font-size: 19px; font-weight: 300; line-height: 1.4; color: #1a1a1a; letter-spacing: 0.06em; }
+.theme-photo .ttl-line { display: none; }
+.theme-photo .sec-head { font-family: 'EB Garamond', serif; font-size: 9px; letter-spacing: 0.18em; color: #aaa; text-transform: uppercase; margin-bottom: 2.5mm; display: flex; align-items: center; gap: 6px; }
+.theme-photo .sec-head::after { content: ''; flex: 1; height: 0.5px; background: #eee; }
+.theme-photo .info-sec { margin-bottom: 4.5mm; padding: 3mm 4mm; position: relative; background: #fff; border: 1px solid #eee; }
+.theme-photo .info-sec::before { content: ''; position: absolute; top: 1mm; left: 1mm; right: 1mm; bottom: 1mm; border: 0.5px solid #c8a96e; opacity: 0.3; pointer-events: none; }
+.theme-photo .info-grid { display: grid; grid-template-columns: 20mm 1fr; }
+.theme-photo .i-key { font-size: 10px; color: #aaa; padding: 1.8mm 0; border-bottom: 0.5px solid #f0f0f0; align-self: start; white-space: nowrap; }
+.theme-photo .i-val { font-family: 'EB Garamond', serif; font-size: 13px; color: #444; padding: 1.8mm 0 1.8mm 3mm; border-bottom: 0.5px solid #f0f0f0; line-height: 1.5; word-break: break-word; }
+.theme-photo .long-sec { margin-bottom: 4mm; }
+.theme-photo .long-blk { margin-bottom: 3mm; padding: 3mm 4mm; position: relative; background: #fff; border: 1px solid #eee; }
+.theme-photo .a5-land .long-sec { margin-bottom: 2mm; }
+.theme-photo .a5-land .long-blk { margin-bottom: 2mm; padding: 2mm 3mm; }
+.theme-photo .a5-land .info-sec { margin-bottom: 2.5mm; }
+.theme-photo .a5-land .pg-header { margin-bottom: 3mm; }
+.theme-photo .a5-land .ttl-block { margin-bottom: 3mm; }
+.theme-photo .long-blk::before { content: ''; position: absolute; top: 1mm; left: 1mm; right: 1mm; bottom: 1mm; border: 0.5px solid #c8a96e; opacity: 0.25; pointer-events: none; }
+.theme-photo .long-lbl { font-family: 'EB Garamond', serif; font-size: 9px; letter-spacing: 0.18em; color: #aaa; text-transform: uppercase; margin-bottom: 1.5mm; display: flex; align-items: center; gap: 6px; }
+.theme-photo .long-lbl::after { content: ''; flex: 1; height: 0.5px; background: #eee; }
+.theme-photo .long-body { font-family: 'Noto Serif JP', serif; font-size: var(--long-body-size, 13px); line-height: 1.9; color: #555; font-weight: 300; word-break: break-word; }
+.theme-photo .art-sec { margin-top: auto; padding: 3.5mm 4.5mm; position: relative; background: #fff; border: 1px solid #eee; }
+.theme-photo .art-sec::before { content: ''; position: absolute; top: 1mm; left: 1mm; right: 1mm; bottom: 1mm; border: 0.5px solid #c8a96e; opacity: 0.3; pointer-events: none; }
+.theme-photo .photo-corner { position: absolute; width: 4mm; height: 4mm; }
+.theme-photo .photo-corner.tl { top: -1px; left: -1px; border-top: 2px solid #c8a96e; border-left: 2px solid #c8a96e; }
+.theme-photo .photo-corner.tr { top: -1px; right: -1px; border-top: 2px solid #c8a96e; border-right: 2px solid #c8a96e; }
+.theme-photo .photo-corner.bl { bottom: -1px; left: -1px; border-bottom: 2px solid #c8a96e; border-left: 2px solid #c8a96e; }
+.theme-photo .photo-corner.br { bottom: -1px; right: -1px; border-bottom: 2px solid #c8a96e; border-right: 2px solid #c8a96e; }
+.theme-photo .art-inner { display: flex; justify-content: space-between; align-items: flex-end; gap: 4mm; }
+.theme-photo .art-inner > div:first-child { flex: 1; min-width: 0; }
+.theme-photo .art-name { font-family: 'EB Garamond', serif; font-size: 17px; color: #1a1a1a; letter-spacing: 0.04em; margin-bottom: 1.5mm; }
+.theme-photo .art-meta { font-size: 7.5px; color: #aaa; line-height: 1.7; word-break: break-all; }
+.theme-photo .art-meta a { color: #c8a96e; text-decoration: none; font-size: 9px; }
+.theme-photo .sp-badge { text-align: right; flex-shrink: 0; }
+.theme-photo .sp-lbl { font-family: 'EB Garamond', serif; font-size: 6.5px; letter-spacing: 0.18em; color: #aaa; text-transform: uppercase; margin-bottom: 0.5mm; }
+.theme-photo .sp-val { font-family: 'EB Garamond', serif; font-size: 24px; color: #555; line-height: 1; }
+.theme-photo .sp-floor { font-size: 10px; color: #aaa; text-align: right; }
+
+/* ===== a5-land: portrait用 — a5-pageと同じテーマ背景を適用 ===== */
+.theme-default .a5-land { background: #f7f4ef; }
+.theme-pop     .a5-land { background: #fff; }
+.theme-photo   .a5-land { background: #fafafa; }
+.theme-horror  .a5-land { background: #080808; font-family: 'Special Elite', monospace; }
+.theme-gothic  .a5-land { background: #0f0c18; background-image: repeating-linear-gradient(0deg, rgba(80,50,120,0.03) 0px, transparent 1px, transparent 8mm, rgba(80,50,120,0.03) 8mm); font-family: 'Cinzel', serif; }
+.theme-punk    .a5-land { font-family: 'Rubik Mono One', sans-serif; position: relative; }
+.theme-grid    .a5-land { background: #fafcfd; background-image: linear-gradient(rgba(0,100,200,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,100,200,0.04) 1px,transparent 1px),linear-gradient(rgba(0,100,200,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(0,100,200,0.02) 1px,transparent 1px); background-size: 10mm 10mm,10mm 10mm,2mm 2mm,2mm 2mm; font-family: 'Noto Sans JP', sans-serif; }
+.theme-news    .a5-land { background: #faf7f0; font-family: 'BIZ UDMincho', serif; padding: 8mm 10mm; }
+.theme-collage .a5-land { background: #f4f0e8; font-family: 'Noto Sans JP', sans-serif; }
+.theme-retro   .a5-land { background: #fdf6e3; font-family: 'Kaisei Opti', serif; }
+
+/* default装飾コーナー（a5-land版） */
+.theme-default .a5-land.a5-ja::before { content: ''; position: absolute; top: 0; left: 0; width: 24mm; height: 24mm; border-top: 1.5px solid #c8a96e; border-left: 1.5px solid #c8a96e; opacity: 0.4; }
+.theme-default .a5-land.a5-en::after  { content: ''; position: absolute; bottom: 0; right: 0; width: 24mm; height: 24mm; border-bottom: 1.5px solid #c8a96e; border-right: 1.5px solid #c8a96e; opacity: 0.4; }
+
+/* photo黒帯（a5-land版）は上のtheme-photo .a5-land .photo-stripeで定義済み */
+
+/* punk バリアント背景（a5-land版） */
+.punk-v0.a5-land, .a5-land .punk-v0 { background: #111; }
+.punk-v1.a5-land, .a5-land .punk-v1 { background: #0a0000; }
+.punk-v2.a5-land, .a5-land .punk-v2 { background: #00080a; }
+
+/* empty state */
+
+/* ===================== THEME: HORROR ===================== */
+.theme-horror .a5-page { background: #0d0d0d; font-family: 'Special Elite', monospace; }
+.horror-tape { position: absolute; top: 6mm; left: 50%; transform: translateX(-50%) rotate(-1.5deg); width: 30mm; height: 5mm; background: rgba(180,160,100,0.14); pointer-events: none; }
+.horror-blood-drip1 { position: absolute; top: 0; right: 18mm; width: 4mm; height: 12mm; background: linear-gradient(180deg, #900d0d 0%, #7a0808 70%, #5a0505 100%); border-radius: 0 0 50% 50%; pointer-events: none; }
+.horror-blood-drip2 { position: absolute; top: 0; right: 26mm; width: 2.5mm; height: 7mm; background: linear-gradient(180deg, #7a0808 0%, #5a0505 100%); border-radius: 0 0 50% 50%; pointer-events: none; }
+.horror-blood-splat { position: absolute; bottom: 55mm; left: 6mm; width: 9mm; height: 7mm; border-radius: 50% 40% 60% 50%; background: #7a0808; pointer-events: none; }
+.horror-blood-splat::after { content: ''; position: absolute; top: 15%; left: 15%; width: 45%; height: 45%; border-radius: 50%; background: #a01818; }
+.horror-blood-dot1 { position: absolute; bottom: 68mm; left: 4mm; width: 1.6mm; height: 1.6mm; border-radius: 50%; background: #7a0808; pointer-events: none; }
+.horror-blood-dot2 { position: absolute; bottom: 50mm; left: 17mm; width: 1.2mm; height: 1.2mm; border-radius: 50%; background: #6d0808; pointer-events: none; }
+.theme-horror .pg-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6mm; padding-bottom: 3mm; border-bottom: 1px solid rgba(140,0,0,0.35); position: relative; z-index: 1; }
+.theme-horror .g-logo { font-size: 9px; letter-spacing: 0.2em; color: rgba(200,50,50,0.95); text-transform: uppercase; line-height: 1.8; }
+.theme-horror .ttl-block { margin-bottom: 6mm; position: relative; z-index: 1; }
+.theme-horror .ex-label { font-size: 9px; letter-spacing: 0.3em; color: rgba(200,50,50,0.9); text-transform: uppercase; margin-bottom: 2mm; }
+.theme-horror .ex-title { font-family: 'Special Elite', monospace; font-size: 26px; line-height: 1.2; color: #e8e2d8; }
+.theme-horror .ttl-line { margin-top: 2.5mm; height: 1px; background: rgba(160,20,20,0.4); width: 100%; position: relative; }
+.theme-horror .ttl-line::after { content: ''; position: absolute; top: 2px; left: 0; width: 40%; height: 1px; background: rgba(160,20,20,0.2); }
+.theme-horror .sec-head { font-size: 9px; letter-spacing: 0.2em; color: rgba(200,50,50,0.85); text-transform: uppercase; margin-bottom: 2mm; position: relative; z-index: 1; }
+.theme-horror .sec-head::after { display: none; }
+.theme-horror .info-sec { margin-bottom: 4mm; position: relative; z-index: 1; }
+.theme-horror .info-grid { display: grid; grid-template-columns: 22mm 1fr; }
+.theme-horror .i-key { font-size: 10px; color: rgba(210,60,60,0.9); padding: 1.8mm 0; border-bottom: 1px solid rgba(255,255,255,0.05); white-space: nowrap; letter-spacing: 0.08em; align-self: start; }
+.theme-horror .i-val { font-size: 13px; color: #e0e0e0; font-weight: 500; padding: 1.8mm 0 1.8mm 3mm; border-bottom: 1px solid rgba(255,255,255,0.05); line-height: 1.5; word-break: break-word; }
+.theme-horror .long-sec { margin-bottom: 3mm; position: relative; z-index: 1; }
+.theme-horror .long-blk { margin-bottom: 3mm; }
+.theme-horror .long-lbl { font-size: 9px; letter-spacing: 0.2em; color: rgba(200,50,50,0.85); text-transform: uppercase; margin-bottom: 1.5mm; }
+.theme-horror .long-lbl::after { display: none; }
+.theme-horror .long-body { font-size: var(--long-body-size, 13px); line-height: 1.9; color: #c8c8c8; font-weight: 500; border-left: 1px solid rgba(160,20,20,0.3); padding-left: 3mm; word-break: break-word; }
+.theme-horror .art-sec { margin-top: auto; padding-top: 4mm; border-top: 1px solid rgba(160,20,20,0.35); display: flex; justify-content: space-between; align-items: flex-end; position: relative; z-index: 1; }
+.theme-horror .art-inner { display: flex; justify-content: space-between; align-items: flex-end; gap: 4mm; width: 100%; }
+.theme-horror .art-inner > div:first-child { flex: 1; min-width: 0; }
+.theme-horror .art-name { font-size: 19px; color: #e0dad2; margin-bottom: 1.5mm; }
+.theme-horror .art-meta { font-size: 9px; color: #999; font-weight: 500; line-height: 1.7; word-break: break-all; }
+.theme-horror .art-meta a { color: rgba(160,20,20,0.65); text-decoration: none; font-size: 9px; }
+.theme-horror .sp-badge { text-align: right; flex-shrink: 0; }
+.theme-horror .sp-lbl { font-size: 7px; letter-spacing: 0.2em; color: rgba(200,60,60,0.8); text-transform: uppercase; }
+.theme-horror .sp-val { font-family: 'EB Garamond', serif; font-size: 26px; color: rgba(160,20,20,0.85); line-height: 1; }
+.theme-horror .sp-val-sm { font-family: 'EB Garamond', serif; font-size: 14px; line-height: 1.3; text-align: right; color: rgba(160,20,20,0.85); }
+.theme-horror .sp-count { font-family: 'EB Garamond', serif; font-size: 16px; line-height: 1.1; text-align: right; color: rgba(160,20,20,0.85); }
+.theme-horror .sp-count-zone { font-size: 7px; letter-spacing: 0.12em; text-align: right; text-transform: uppercase; color: rgba(200,60,60,0.8); }
+.theme-horror .sp-floor { font-size: 9px; color: rgba(200,60,60,0.8); text-align: right; }
+.theme-horror .members-list .member-tag { color: #999; }
+.theme-horror .qr-wrap canvas, .theme-horror .qr-wrap img { filter: invert(1); }
+
+/* ===================== THEME: GOTHIC ===================== */
+.theme-gothic .a5-page { background: #0f0c18; background-image: repeating-linear-gradient(0deg, rgba(80,50,120,0.03) 0px, transparent 1px, transparent 8mm, rgba(80,50,120,0.03) 8mm); font-family: 'Cinzel', serif; }
+.gothic-arch { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 40mm; height: 20mm; border: 1px solid rgba(160,120,220,0.15); border-bottom: none; border-radius: 20mm 20mm 0 0; pointer-events: none; z-index: 0; }
+.gothic-arch::after { content: '✦'; position: absolute; bottom: -5mm; left: 50%; transform: translateX(-50%); font-size: 9px; color: rgba(180,140,255,0.4); }
+.gothic-corner { position: absolute; width: 8mm; height: 8mm; pointer-events: none; }
+.gothic-corner.tl { top: 6mm; left: 6mm; border-top: 1px solid rgba(160,120,220,0.3); border-left: 1px solid rgba(160,120,220,0.3); }
+.gothic-corner.tr { top: 6mm; right: 6mm; border-top: 1px solid rgba(160,120,220,0.3); border-right: 1px solid rgba(160,120,220,0.3); }
+.gothic-corner.bl { bottom: 6mm; left: 6mm; border-bottom: 1px solid rgba(160,120,220,0.3); border-left: 1px solid rgba(160,120,220,0.3); }
+.gothic-corner.br { bottom: 6mm; right: 6mm; border-bottom: 1px solid rgba(160,120,220,0.3); border-right: 1px solid rgba(160,120,220,0.3); }
+.theme-gothic .pg-header { text-align: center; margin-bottom: 6mm; padding-bottom: 4mm; border-bottom: 1px solid rgba(160,120,220,0.2); position: relative; z-index: 1; }
+.theme-gothic .hd-deco { font-size: 7px; letter-spacing: 0.5em; color: rgba(200,170,255,0.75); text-transform: uppercase; margin-bottom: 1.5mm; }
+.theme-gothic .g-logo { font-family: 'Cinzel', serif; font-size: 12px; letter-spacing: 0.2em; color: rgba(220,195,255,0.95); text-transform: uppercase; }
+.theme-gothic .g-logo-sub { font-size: 7px; letter-spacing: 0.35em; color: rgba(200,170,255,0.7); margin-top: 1mm; }
+.theme-gothic .ttl-block { margin-bottom: 5mm; text-align: center; position: relative; z-index: 1; }
+.theme-gothic .ex-label { font-family: 'Cinzel', serif; font-size: 8px; letter-spacing: 0.4em; color: rgba(200,170,255,0.85); text-transform: uppercase; margin-bottom: 2mm; }
+.theme-gothic .gothic-ornament { font-size: 9px; color: rgba(180,140,255,0.3); letter-spacing: 4mm; margin-bottom: 2mm; }
+.theme-gothic .ex-title { font-family: 'Cinzel', serif; font-size: 22px; font-weight: 600; line-height: 1.3; color: #e8e0f8; letter-spacing: 0.05em; text-shadow: 0 0 30px rgba(140,100,220,0.5); }
+.theme-gothic .ttl-line { display: none; }
+.theme-gothic .sec-head { font-family: 'Cinzel', serif; font-size: 8px; letter-spacing: 0.25em; color: rgba(200,170,255,0.85); text-transform: uppercase; margin-bottom: 2mm; display: flex; align-items: center; gap: 3mm; position: relative; z-index: 1; }
+.theme-gothic .sec-head::after { content: ''; flex: 1; height: 1px; background: rgba(160,120,220,0.15); }
+.theme-gothic .info-sec { margin-bottom: 4mm; position: relative; z-index: 1; }
+.theme-gothic .info-grid { display: grid; grid-template-columns: 22mm 1fr; border: 1px solid rgba(160,120,220,0.12); }
+.theme-gothic .i-key { font-family: 'Cinzel', serif; font-size: 9px; color: rgba(210,185,255,0.9); padding: 1.8mm 2mm; border-bottom: 1px solid rgba(160,120,220,0.08); border-right: 1px solid rgba(160,120,220,0.08); white-space: nowrap; letter-spacing: 0.05em; align-self: start; }
+.theme-gothic .i-val { font-size: 13px; color: #d8ccec; font-weight: 500; padding: 1.8mm 2mm 1.8mm 3mm; border-bottom: 1px solid rgba(160,120,220,0.08); line-height: 1.5; word-break: break-word; font-family: 'Noto Serif JP', serif; }
+.theme-gothic .long-sec { margin-bottom: 3.5mm; position: relative; z-index: 1; }
+.theme-gothic .long-blk { margin-bottom: 3mm; }
+.theme-gothic .long-lbl { font-family: 'Cinzel', serif; font-size: 8px; letter-spacing: 0.25em; color: rgba(200,170,255,0.85); text-transform: uppercase; margin-bottom: 1.5mm; display: flex; align-items: center; gap: 3mm; }
+.theme-gothic .long-lbl::after { content: ''; flex: 1; height: 1px; background: rgba(160,120,220,0.15); }
+.theme-gothic .long-body { font-size: var(--long-body-size, 13px); line-height: 1.9; color: #c0b0dc; font-family: 'Noto Serif JP', serif; font-weight: 500; word-break: break-word; }
+.theme-gothic .art-sec { margin-top: auto; padding-top: 4mm; border-top: 1px solid rgba(160,120,220,0.2); position: relative; z-index: 1; }
+.theme-gothic .art-ornament { font-size: 9px; color: rgba(180,140,255,0.3); letter-spacing: 3mm; margin-bottom: 2mm; text-align: center; }
+.theme-gothic .art-inner { display: flex; justify-content: space-between; align-items: flex-end; gap: 4mm; }
+.theme-gothic .art-inner > div:first-child { flex: 1; min-width: 0; }
+.theme-gothic .art-name { font-family: 'Cinzel', serif; font-size: 18px; color: #d8c8f0; letter-spacing: 0.05em; margin-bottom: 1.5mm; }
+.theme-gothic .art-meta { font-size: 9px; color: rgba(200,170,240,0.85); font-weight: 500; line-height: 1.7; word-break: break-all; font-family: 'Noto Sans JP', sans-serif; }
+.theme-gothic .art-meta a { color: rgba(180,140,255,0.5); text-decoration: none; font-size: 9px; }
+.theme-gothic .sp-badge { text-align: right; flex-shrink: 0; }
+.theme-gothic .sp-lbl { font-family: 'Cinzel', serif; font-size: 7px; letter-spacing: 0.2em; color: rgba(200,170,255,0.8); text-transform: uppercase; }
+.theme-gothic .sp-val { font-family: 'Cinzel', serif; font-size: 24px; color: rgba(210,185,255,0.9); line-height: 1; }
+.theme-gothic .sp-val-sm { font-family: 'Cinzel', serif; font-size: 14px; line-height: 1.3; text-align: right; color: rgba(210,185,255,0.9); }
+.theme-gothic .sp-count { font-family: 'Cinzel', serif; font-size: 16px; line-height: 1.1; text-align: right; color: rgba(210,185,255,0.9); }
+.theme-gothic .sp-count-zone { font-size: 7px; letter-spacing: 0.12em; text-align: right; opacity: 0.6; text-transform: uppercase; color: rgba(200,170,255,0.7); }
+.theme-gothic .sp-floor { font-size: 9px; color: rgba(200,170,255,0.75); text-align: right; }
+.theme-gothic .members-list .member-tag { color: rgba(210,185,255,0.85); font-family: 'Noto Sans JP', sans-serif; }
+.theme-gothic .qr-wrap canvas, .theme-gothic .qr-wrap img { filter: invert(1) sepia(1) saturate(3) hue-rotate(220deg) opacity(0.6); }
+
+/* ===================== THEME: PUNK ===================== */
+.theme-punk .a5-page { font-family: 'Rubik Mono One', sans-serif; position: relative; }
+.punk-v0, .punk-v1, .punk-v2 {
+  position: absolute; inset: 0;
+  padding: 12mm 12mm 10mm;
+  display: flex; flex-direction: column;
+}
+.punk-v0 { background: #111; }
+.punk-v1 { background: #0a0000; }
+.punk-v2 { background: #00080a; }
+.theme-punk .pg-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5mm; margin-top: 4mm; position: relative; z-index: 1; }
+.theme-punk .issue { font-size: 9px; color: #333; border: 1px solid #222; padding: 1mm 2mm; letter-spacing: 0.1em; }
+.punk-v0 .g-logo { font-size: 9px; color: #ff0; letter-spacing: 0.05em; line-height: 1.5; }
+.punk-v1 .g-logo { font-size: 9px; color: #f05; letter-spacing: 0.05em; line-height: 1.5; }
+.punk-v2 .g-logo { font-size: 9px; color: #0fc; letter-spacing: 0.05em; line-height: 1.5; }
+.theme-punk .ttl-block { margin-bottom: 5mm; position: relative; z-index: 1; }
+.theme-punk .ex-label { font-size: 9px; margin-bottom: 2mm; letter-spacing: 0.05em; }
+.punk-v0 .ex-label { color: #ff0; }
+.punk-v1 .ex-label { color: #f05; }
+.punk-v2 .ex-label { color: #0fc; }
+.theme-punk .ex-title { font-size: 24px; line-height: 1.2; color: #f0f0f0; letter-spacing: -0.01em; }
+.theme-punk .ttl-line { margin-top: 2.5mm; height: 3px; width: 100%; }
+.punk-v0 .ttl-line { background: #ff0; }
+.punk-v1 .ttl-line { background: #f05; }
+.punk-v2 .ttl-line { background: #0fc; }
+.theme-punk .info-band { padding: 2.5mm 3mm; margin-bottom: 4mm; position: relative; z-index: 1; }
+.punk-v0 .info-band { background: rgba(255,255,0,0.05); border: 1px solid rgba(255,255,0,0.12); }
+.punk-v1 .info-band { background: rgba(255,0,50,0.05); border: 1px solid rgba(255,0,50,0.15); }
+.punk-v2 .info-band { background: rgba(0,255,200,0.05); border: 1px solid rgba(0,255,200,0.12); }
+.theme-punk .info-band::before { content: '//'; position: absolute; top: 1mm; left: 3mm; font-size: 8px; }
+.punk-v0 .info-band::before { color: rgba(255,255,0,0.3); }
+.punk-v1 .info-band::before { color: rgba(255,0,50,0.4); }
+.punk-v2 .info-band::before { color: rgba(0,255,200,0.3); }
+.theme-punk .info-grid { display: grid; grid-template-columns: 20mm 1fr; padding-top: 2mm; }
+.theme-punk .i-key { font-size: 9px; padding: 1.5mm 0; white-space: nowrap; }
+.punk-v0 .i-key { color: rgba(255,255,0,0.5); }
+.punk-v1 .i-key { color: rgba(255,0,80,0.6); }
+.punk-v2 .i-key { color: rgba(0,255,200,0.5); }
+.theme-punk .i-val { font-size: 13px; color: #f0f0f0; font-weight: 500; padding: 1.5mm 0 1.5mm 3mm; line-height: 1.5; word-break: break-word; font-family: 'Noto Sans JP', sans-serif; }
+.theme-punk .long-sec { position: relative; z-index: 1; margin-bottom: 3mm; }
+.theme-punk .long-blk { margin-bottom: 3mm; padding-left: 3mm; }
+.punk-v0 .long-blk { border-left: 2px solid rgba(255,0,100,0.4); }
+.punk-v1 .long-blk { border-left: 2px solid rgba(255,255,0,0.3); }
+.punk-v2 .long-blk { border-left: 2px solid rgba(240,0,240,0.4); }
+.theme-punk .long-lbl { font-size: 9px; margin-bottom: 1.5mm; letter-spacing: 0.05em; }
+.theme-punk .long-lbl::after { display: none; }
+.punk-v0 .long-lbl { color: #f0f; }
+.punk-v1 .long-lbl { color: #ff0; }
+.punk-v2 .long-lbl { color: #f0f; }
+.theme-punk .long-body { font-size: var(--long-body-size, 13px); line-height: 1.9; color: #d8d8d8; font-weight: 500; word-break: break-word; font-family: 'Noto Sans JP', sans-serif; }
+.theme-punk .art-sec { margin-top: auto; padding-top: 3mm; border-top: 2px solid; display: flex; justify-content: space-between; align-items: flex-end; position: relative; z-index: 1; }
+.punk-v0 .art-sec { border-color: #ff0; }
+.punk-v1 .art-sec { border-color: #f05; }
+.punk-v2 .art-sec { border-color: #0fc; }
+.theme-punk .art-inner { display: flex; justify-content: space-between; align-items: flex-end; gap: 4mm; width: 100%; }
+.theme-punk .art-inner > div:first-child { flex: 1; min-width: 0; }
+.theme-punk .art-name { font-size: 18px; margin-bottom: 1.5mm; }
+.punk-v0 .art-name { color: #ff0; }
+.punk-v1 .art-name { color: #f05; }
+.punk-v2 .art-name { color: #0fc; }
+.theme-punk .art-meta { font-size: 9px; color: #999; font-weight: 500; line-height: 1.7; word-break: break-all; font-family: 'Noto Sans JP', sans-serif; }
+.theme-punk .art-meta a { text-decoration: none; font-size: 9px; }
+.punk-v0 .art-meta a { color: rgba(255,0,240,0.6); }
+.punk-v1 .art-meta a { color: rgba(255,255,0,0.5); }
+.punk-v2 .art-meta a { color: rgba(240,0,240,0.5); }
+.theme-punk .sp-badge { text-align: right; flex-shrink: 0; }
+.theme-punk .sp-lbl { font-size: 7px; }
+.punk-v0 .sp-lbl { color: rgba(255,0,100,0.6); }
+.punk-v1 .sp-lbl { color: rgba(255,255,0,0.5); }
+.punk-v2 .sp-lbl { color: rgba(0,255,200,0.5); }
+.theme-punk .sp-val { font-size: 24px; line-height: 1; }
+.punk-v0 .sp-val { color: #f0f; }
+.punk-v1 .sp-val { color: #ff0; }
+.punk-v2 .sp-val { color: #f0f; }
+.theme-punk .sp-val-sm { font-size: 14px; line-height: 1.3; text-align: right; }
+.punk-v0 .sp-val-sm { color: #f0f; }
+.punk-v1 .sp-val-sm { color: #ff0; }
+.punk-v2 .sp-val-sm { color: #f0f; }
+.theme-punk .sp-count { font-size: 16px; line-height: 1.1; text-align: right; }
+.punk-v0 .sp-count { color: #f0f; }
+.punk-v1 .sp-count { color: #ff0; }
+.punk-v2 .sp-count { color: #f0f; }
+.theme-punk .sp-count-zone { font-size: 7px; letter-spacing: 0.1em; text-align: right; opacity: 0.6; text-transform: uppercase; color: #888; }
+.theme-punk .sp-floor { font-size: 9px; text-align: right; color: #444; }
+.theme-punk .members-list .member-tag { color: #555; font-family: 'Noto Sans JP', sans-serif; }
+.theme-punk .qr-wrap canvas, .theme-punk .qr-wrap img { filter: invert(1); }
+
+/* ===================== THEME: GRID ===================== */
+.theme-grid .a5-page { background: #fafcfd; background-image: linear-gradient(rgba(0,100,200,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,100,200,0.04) 1px,transparent 1px),linear-gradient(rgba(0,100,200,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(0,100,200,0.02) 1px,transparent 1px); background-size: 10mm 10mm,10mm 10mm,2mm 2mm,2mm 2mm; font-family: 'Noto Sans JP', sans-serif; }
+.theme-grid .pg-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 5mm; padding-bottom: 2mm; border-bottom: 0.5px solid #0064c8; }
+.theme-grid .g-logo { font-size: 9px; letter-spacing: 0.25em; color: #0064c8; text-transform: uppercase; }
+.theme-grid .grid-dim { font-size: 9px; color: #0064c8; opacity: 0.4; font-family: 'EB Garamond', serif; }
+.theme-grid .ttl-block { margin-bottom: 5mm; padding: 3mm 4mm; border: 0.5px solid #0064c8; position: relative; }
+.theme-grid .ttl-block::before { content: 'A'; position: absolute; top: -4px; left: -4px; font-size: 8px; color: #0064c8; opacity: 0.5; line-height: 1; }
+.theme-grid .ex-label { font-size: 6.5px; letter-spacing: 0.2em; color: #0064c8; text-transform: uppercase; margin-bottom: 2mm; opacity: 0.6; }
+.theme-grid .ex-title { font-size: 20px; font-weight: 700; line-height: 1.3; color: #0a1628; letter-spacing: 0.02em; }
+.theme-grid .ttl-line { display: none; }
+.theme-grid .sec-head { font-size: 6.5px; letter-spacing: 0.2em; color: #0064c8; text-transform: uppercase; margin-bottom: 2mm; opacity: 0.7; border-left: 2px solid #0064c8; padding-left: 3px; }
+.theme-grid .sec-head::after { display: none; }
+.theme-grid .info-sec { margin-bottom: 4.5mm; }
+.theme-grid .info-grid { display: grid; grid-template-columns: 20mm 1fr; border: 0.5px solid rgba(0,100,200,0.15); }
+.theme-grid .i-key { font-size: 7.5px; color: #0064c8; padding: 1.8mm 2mm; border-bottom: 0.5px solid rgba(0,100,200,0.1); border-right: 0.5px solid rgba(0,100,200,0.1); align-self: start; white-space: nowrap; opacity: 0.8; }
+.theme-grid .i-val { font-size: 13px; color: #0a1628; padding: 1.8mm 2mm 1.8mm 3mm; border-bottom: 0.5px solid rgba(0,100,200,0.1); line-height: 1.5; word-break: break-word; }
+.theme-grid .long-sec { margin-bottom: 4mm; }
+.theme-grid .long-blk { margin-bottom: 3mm; border: 0.5px solid rgba(0,100,200,0.15); padding: 2mm 3mm; }
+.theme-grid .long-lbl { font-size: 6.5px; letter-spacing: 0.2em; color: #0064c8; text-transform: uppercase; margin-bottom: 1.5mm; opacity: 0.7; }
+.theme-grid .long-lbl::after { display: none; }
+.theme-grid .long-body { font-size: var(--long-body-size, 13px); line-height: 1.9; color: #333; word-break: break-word; }
+.theme-grid .art-sec { margin-top: auto; padding: 3mm; border: 0.5px solid #0064c8; position: relative; }
+.theme-grid .art-sec::before { content: 'ARTIST'; position: absolute; top: -4px; left: 3mm; font-size: 5.5px; color: #0064c8; background: #fafcfd; padding: 0 2px; letter-spacing: 0.2em; opacity: 0.7; }
+.theme-grid .art-inner { display: flex; justify-content: space-between; align-items: flex-end; gap: 4mm; }
+.theme-grid .art-inner > div:first-child { flex: 1; min-width: 0; }
+.theme-grid .art-name { font-size: 16px; font-weight: 700; color: #0a1628; margin-bottom: 1.5mm; }
+.theme-grid .art-meta { font-size: 9px; color: #666; line-height: 1.7; word-break: break-all; }
+.theme-grid .art-meta a { color: #0064c8; text-decoration: none; font-size: 9px; }
+.theme-grid .sp-badge { text-align: right; flex-shrink: 0; }
+.theme-grid .sp-lbl { font-size: 8px; letter-spacing: 0.2em; color: #0064c8; text-transform: uppercase; opacity: 0.7; }
+.theme-grid .sp-val { font-family: 'EB Garamond', serif; font-size: 24px; color: #0064c8; line-height: 1; }
+.theme-grid .sp-floor { font-size: 9px; color: #0064c8; text-align: right; opacity: 0.7; }
+
+/* ===================== THEME: NEWSPAPER ===================== */
+.theme-news .a5-page { background: #faf7f0; font-family: 'BIZ UDMincho', serif; padding: 8mm 10mm 8mm; }
+.theme-news .news-masthead { text-align: center; padding-bottom: 3mm; margin-bottom: 4mm; border-bottom: 3px double #1a1a1a; }
+.theme-news .masthead-title { font-family: 'Zen Old Mincho', serif; font-size: 20px; font-weight: 700; color: #1a1a1a; letter-spacing: 0.08em; line-height: 1; margin-bottom: 2mm; }
+.theme-news .masthead-sub { font-size: 9px; letter-spacing: 0.3em; color: #888; text-transform: uppercase; }
+.theme-news .dateline { font-size: 9px; color: #888; margin-top: 2mm; border-top: 0.5px solid #ccc; padding-top: 1.5mm; display: flex; justify-content: space-between; }
+.theme-news .news-body-wrap { display: flex; flex-direction: column; flex: 1; }
+.theme-news .news-cols { display: grid; grid-template-columns: 1fr 0.5px 1fr; gap: 0 4mm; flex: 1; }
+.theme-news .col-div { background: #ccc; }
+.theme-news .ex-title { font-family: 'Zen Old Mincho', serif; font-size: 17px; font-weight: 700; line-height: 1.3; color: #1a1a1a; margin-bottom: 2.5mm; }
+.theme-news .byline { font-size: 9px; color: #888; margin-bottom: 2.5mm; letter-spacing: 0.1em; border-bottom: 0.5px solid #ccc; padding-bottom: 1.5mm; }
+.theme-news .news-body { font-size: var(--long-body-size, 13px); line-height: 1.8; color: #333; margin-bottom: 2.5mm; word-break: break-word; }
+.theme-news .kicker { font-size: 9px; letter-spacing: 0.15em; color: #555; text-transform: uppercase; margin-bottom: 1.5mm; border-left: 2px solid #1a1a1a; padding-left: 2mm; }
+.theme-news .info-item { display: flex; gap: 2mm; margin-bottom: 1.5mm; }
+.theme-news .ik { font-size: 7.5px; color: #888; white-space: nowrap; min-width: 10mm; }
+.theme-news .iv { font-size: 13px; color: #333; word-break: break-word; }
+.theme-news .art-block { margin-top: auto; padding-top: 3mm; border-top: 2px solid #1a1a1a; }
+.theme-news .art-name { font-family: 'Zen Old Mincho', serif; font-size: 14px; font-weight: 700; color: #1a1a1a; margin-bottom: 1mm; }
+.theme-news .art-meta { font-size: 9px; color: #666; line-height: 1.6; word-break: break-word; }
+.theme-news .space-box { display: inline-block; border: 1px solid #1a1a1a; padding: 0.5mm 2.5mm; font-size: 11px; font-weight: 700; color: #1a1a1a; margin-top: 1.5mm; }
+
+/* ===================== THEME: COLLAGE ===================== */
+.theme-collage .a5-page { background: #f4f0e8; font-family: 'Noto Sans JP', sans-serif; }
+.theme-collage .tape { position: absolute; top: 8mm; left: 50%; transform: translateX(-50%) rotate(-1deg); width: 28mm; height: 4.5mm; background: rgba(255,220,80,0.55); z-index: 2; pointer-events: none; }
+.theme-collage .tape2 { position: absolute; bottom: 18mm; right: 7mm; width: 4.5mm; height: 18mm; background: rgba(255,150,150,0.45); transform: rotate(2deg); z-index: 2; pointer-events: none; }
+.theme-collage .coll-header { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 5mm; margin-bottom: 4mm; border-bottom: 1.5px solid #1a1a1a; padding-bottom: 2mm; }
+.theme-collage .g-logo { font-family: 'RocknRoll One', sans-serif; font-size: 11px; letter-spacing: 0.08em; color: #1a1a1a; }
+.theme-collage .issue { font-size: 9px; color: #888; letter-spacing: 0.1em; font-family: 'EB Garamond', serif; }
+.theme-collage .ttl-block { margin-bottom: 4.5mm; background: #fff; padding: 3.5mm 4mm; transform: rotate(-0.5deg); box-shadow: 2px 2px 0 rgba(0,0,0,0.08); position: relative; z-index: 1; }
+.theme-collage .ex-label { font-family: 'RocknRoll One', sans-serif; font-size: 9px; letter-spacing: 0.1em; color: #e05; margin-bottom: 1.5mm; }
+.theme-collage .ex-title { font-family: 'RocknRoll One', sans-serif; font-size: 19px; line-height: 1.3; color: #1a1a1a; }
+.theme-collage .ttl-line { width: 40%; height: 3px; background: #1a1a1a; margin-top: 2mm; }
+.theme-collage .info-strip { background: #1a1a1a; color: #fff; padding: 2.5mm 4mm; margin-bottom: 4mm; }
+.theme-collage .info-strip-row { display: flex; gap: 4mm; flex-wrap: wrap; margin-bottom: 1mm; }
+.theme-collage .info-strip-row:last-child { margin-bottom: 0; }
+.theme-collage .ik { font-size: 9px; color: #888; letter-spacing: 0.15em; text-transform: uppercase; white-space: nowrap; }
+.theme-collage .iv { font-size: 13px; color: #fff; word-break: break-word; }
+.theme-collage .long-sec { margin-bottom: 0; }
+.theme-collage .long-blk { margin-bottom: 3mm; padding: 3mm; background: #fff; transform: rotate(0.3deg); }
+.theme-collage .long-lbl { font-family: 'RocknRoll One', sans-serif; font-size: 7.5px; color: #e05; margin-bottom: 1.5mm; }
+.theme-collage .long-lbl::after { display: none; }
+.theme-collage .long-body { font-size: var(--long-body-size, 13px); line-height: 1.9; color: #333; font-family: 'Noto Serif JP', serif; font-weight: 300; word-break: break-word; }
+.theme-collage .members-list .member-tag { color: #fff; }
+.theme-collage .art-sec { margin-top: auto; background: #1a1a1a; padding: 3.5mm 4mm; transform: rotate(-0.3deg); }
+.theme-collage .art-inner { display: flex; justify-content: space-between; align-items: flex-end; gap: 4mm; }
+.theme-collage .art-inner > div:first-child { flex: 1; min-width: 0; }
+.theme-collage .art-name { font-family: 'RocknRoll One', sans-serif; font-size: 16px; color: #fff; margin-bottom: 1.5mm; }
+.theme-collage .art-meta { font-size: 7.5px; color: #888; line-height: 1.7; word-break: break-all; }
+.theme-collage .art-meta a { color: #e05; text-decoration: none; font-size: 9px; }
+.theme-collage .sp-badge { text-align: right; flex-shrink: 0; }
+.theme-collage .sp-lbl { font-size: 6.5px; color: #666; text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 0.5mm; }
+.theme-collage .sp-val { font-family: 'EB Garamond', serif; font-size: 24px; color: #e05; line-height: 1; }
+.theme-collage .sp-floor { font-size: 10px; color: #666; text-align: right; }
+
+/* ===================== THEME: RETRO ===================== */
+.theme-retro .a5-page { background: #fdf6e3; font-family: 'Kaisei Opti', serif; }
+.theme-retro .stamp-border { position: absolute; inset: 4mm; border: 1px dashed #b8960c; opacity: 0.4; pointer-events: none; }
+.theme-retro .postmark { position: absolute; top: 12mm; right: 10mm; width: 20mm; height: 20mm; border: 2px solid rgba(180,60,60,0.4); border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: rotate(12deg); pointer-events: none; z-index: 10; }
+.theme-retro .pm-txt { font-size: 5px; letter-spacing: 0.1em; color: rgba(180,60,60,0.5); text-transform: uppercase; text-align: center; line-height: 1.5; }
+.theme-retro .pm-date { font-size: 5.5px; color: rgba(180,60,60,0.5); border-top: 1px solid rgba(180,60,60,0.3); border-bottom: 1px solid rgba(180,60,60,0.3); padding: 0.5mm 1.5mm; margin: 0.5mm 0; }
+.theme-retro .pg-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 5mm; padding-bottom: 3mm; border-bottom: 1px solid #d4b96a; position: relative; z-index: 1; }
+.theme-retro .postmark-bg { position: absolute; top: 12mm; right: 10mm; width: 20mm; height: 20mm; border-radius: 50%; background: rgba(253,246,227,0.0); z-index: 10; pointer-events: none; }
+.theme-retro .g-logo { font-size: 10px; letter-spacing: 0.2em; color: #8b7040; text-transform: uppercase; line-height: 1.8; }
+.theme-retro .stamp-box { width: 16mm; height: 16mm; border: 1.5px solid #b8960c; display: flex; align-items: center; justify-content: center; background: #fff8e8; flex-shrink: 0; }
+.theme-retro .stamp-inner { font-family: 'EB Garamond', serif; font-size: 18px; color: #b8960c; line-height: 1; }
+.theme-retro .ttl-block { margin-bottom: 5mm; position: relative; z-index: 1; }
+.theme-retro .ex-label { font-size: 9px; letter-spacing: 0.22em; color: #8b7040; text-transform: uppercase; margin-bottom: 2mm; }
+.theme-retro .ex-title { font-size: 21px; line-height: 1.35; color: #3a2800; letter-spacing: 0.04em; }
+.theme-retro .ttl-line { font-size: 12px; color: #b8960c; margin-top: 1mm; opacity: 0.6; letter-spacing: 2mm; height: auto; background: none; width: auto; }
+.theme-retro .sec-head { font-size: 9px; letter-spacing: 0.2em; color: #8b7040; text-transform: uppercase; margin-bottom: 2mm; display: flex; align-items: center; gap: 4px; position: relative; z-index: 1; }
+.theme-retro .sec-head::before { content: '✦'; font-size: 8px; color: #b8960c; opacity: 0.6; }
+.theme-retro .sec-head::after { content: '✦'; font-size: 8px; color: #b8960c; opacity: 0.6; flex: unset; height: unset; background: none; }
+.theme-retro .info-sec { margin-bottom: 4.5mm; position: relative; z-index: 1; }
+.theme-retro .info-grid { display: grid; grid-template-columns: 20mm 1fr; }
+.theme-retro .i-key { font-size: 10px; color: #8b7040; padding: 1.8mm 0; border-bottom: 0.5px solid #d4b96a; align-self: start; white-space: nowrap; }
+.theme-retro .i-val { font-size: 13px; color: #3a2800; padding: 1.8mm 0 1.8mm 3mm; border-bottom: 0.5px solid #d4b96a; line-height: 1.6; word-break: break-word; }
+.theme-retro .long-sec { margin-bottom: 4mm; position: relative; z-index: 1; }
+.theme-retro .long-blk { margin-bottom: 3mm; }
+.theme-retro .long-lbl { font-size: 9px; letter-spacing: 0.2em; color: #8b7040; text-transform: uppercase; margin-bottom: 1.5mm; display: flex; align-items: center; gap: 4px; }
+.theme-retro .long-lbl::before { content: '—'; color: #b8960c; }
+.theme-retro .long-lbl::after { content: '—'; color: #b8960c; flex: unset; height: unset; background: none; }
+.theme-retro .long-body { font-size: var(--long-body-size, 13px); line-height: 1.9; color: #4a3800; padding-left: 2mm; border-left: 1px solid #d4b96a; word-break: break-word; }
+.theme-retro .art-sec { margin-top: auto; padding-top: 3.5mm; border-top: 1px solid #d4b96a; position: relative; z-index: 1; }
+.theme-retro .art-inner { display: flex; justify-content: space-between; align-items: flex-end; gap: 4mm; }
+.theme-retro .art-inner > div:first-child { flex: 1; min-width: 0; }
+.theme-retro .art-name { font-family: 'EB Garamond', serif; font-size: 18px; color: #3a2800; margin-bottom: 1.5mm; }
+.theme-retro .art-meta { font-size: 7.5px; color: #8b7040; line-height: 1.7; word-break: break-all; }
+.theme-retro .art-meta a { color: #b8960c; text-decoration: none; font-size: 9px; }
+.theme-retro .sp-badge { text-align: right; flex-shrink: 0; }
+.theme-retro .sp-lbl { font-size: 6.5px; letter-spacing: 0.2em; color: #8b7040; text-transform: uppercase; }
+.theme-retro .sp-val { font-family: 'EB Garamond', serif; font-size: 24px; color: #b8960c; line-height: 1; }
+.theme-retro .sp-floor { font-size: 10px; color: #8b7040; text-align: right; }
+
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; }
+.empty-state .icon { font-size: 36px; opacity: 0.15; }
+.empty-state p { font-family: 'EB Garamond', serif; font-size: 13px; letter-spacing: 0.1em; opacity: 0.3; }
+
+/* ===== PRINT ===== */
+@media print {
+  html, body { margin: 0 !important; padding: 0 !important; background: white !important; width: 100% !important; }
+  #editor-panel, #sidebar-resizer, .preview-toolbar { display: none !important; }
+  #app { display: block !important; margin: 0 !important; padding: 0 !important; width: 100% !important; }
+  #preview-panel { display: block !important; margin: 0 !important; padding: 0 !important; width: 100% !important; background: none !important; }
+  #pageContainer { display: block !important; margin: 0 !important; padding: 0 !important; gap: 0 !important; background: none !important; }
+  .a4-sheet { box-shadow: none !important; margin: 0 !important; display: flex !important; }
+  .a4-sheet-portrait { box-shadow: none !important; margin: 0 !important; display: flex !important; }
+
+  /* 名前付き@pageで横縦を個別に制御 */
+  @page landscape { size: A4 landscape; margin: 0; }
+  @page portrait  { size: A4 portrait;  margin: 0; }
+  .a4-sheet          { page: landscape; }
+  .a4-sheet-portrait { page: portrait; }
+
+  /* 印刷時に重いCSS効果を無効化 */
+
+  .theme-gothic .a5-page,
+  .theme-gothic .a5-land { background-image: none !important; }
+  .theme-punk .a5-page,
+  .theme-punk .a5-land { background-image: none !important; }
+  .theme-horror .ex-title,
+  .theme-horror .art-name,
+  .theme-gothic .ex-title { text-shadow: none !important; }
+  .theme-horror .qr-wrap canvas, .theme-horror .qr-wrap img,
+  .theme-gothic .qr-wrap canvas, .theme-gothic .qr-wrap img,
+  .theme-punk .qr-wrap canvas,   .theme-punk .qr-wrap img { filter: none !important; }
+}
+
+/* 背景色・背景画像を印刷時も強制出力 */
+* {
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+  color-adjust: exact !important;
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- LEFT PANEL -->
+  <div id="editor-panel" translate="no">
+    <div class="editor-header">
+      <h1>DFG Exhibition Generator</h1>
+      <p>DESIGN FESTA GALLERY — 展示ページ生成ツール</p>
+    </div>
+    <div style="font-size:11px;color:#4a9;letter-spacing:0.05em;padding:8px 0;">🔄 DFGメッセージボードで取り込んだ展示が自動的に表示されます</div>
+    <button id="btnQueueDirect" onclick="importFromQueueDirectly()" style="width:100%;padding:8px;background:#2a4a3a;border:1px solid #3a6a4a;color:#8fd;font-size:12px;border-radius:4px;cursor:pointer;margin-bottom:8px;">📥 ブックマークキューから取り込む</button>
+    <details style="margin-top:2px;">
+      <summary style="font-size:11px;color:#aaa;cursor:pointer;letter-spacing:0.08em;list-style:none;padding:3px 0;">🔖 ブックマークレット（最新版）</summary>
+      <textarea id="bookmarkletCode" readonly style="width:100%;height:60px;margin-top:6px;background:#0a0a0a;color:#4a9;border:1px solid #2a2a2a;border-radius:3px;font-size:9px;padding:6px;resize:none;font-family:monospace;line-height:1.4;" onclick="this.select()"></textarea>
+      <button onclick="navigator.clipboard.writeText(document.getElementById('bookmarkletCode').value).then(()=>{this.textContent='✓ コピー済み';setTimeout(()=>this.textContent='📋 コピー',1500)})" style="margin-top:4px;width:100%;padding:5px;background:transparent;border:1px solid #2a2a2a;color:#aaa;font-size:11px;border-radius:3px;cursor:pointer;">📋 コピー</button>
+    </details>
+    <hr class="divider">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+      <label style="margin:0;">展示内容 文字サイズ</label>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <button onclick="adjustLongBodySize(-0.5)" style="width:24px;height:24px;background:#0a0a0a;border:1px solid #2a2a2a;border-radius:3px;color:#aaa;font-size:14px;cursor:pointer;line-height:1;">−</button>
+        <span id="longBodySizeLabel" style="font-size:12px;color:#e0dbd3;min-width:34px;text-align:center;">13px</span>
+        <button onclick="adjustLongBodySize(0.5)" style="width:24px;height:24px;background:#0a0a0a;border:1px solid #2a2a2a;border-radius:3px;color:#aaa;font-size:14px;cursor:pointer;line-height:1;">＋</button>
+      </div>
+    </div>
+    <hr class="divider">
+    <div class="list-header">
+      <label style="margin:0">追加済みページ</label>
+      <span class="page-count" id="pageCount">0 ページ</span>
+    </div>
+    <div id="bulkTheme" style="display:none; flex-direction:column; gap:3px; padding:4px 0 2px;">
+      <span style="font-size:11px;color:#aaa;letter-spacing:0.08em;">一括テーマ変更</span>
+      <div style="display:flex;gap:3px;">
+        <button class="theme-mini-btn" onclick="applyAllTheme('default')">📄</button>
+        <button class="theme-mini-btn" onclick="applyAllTheme('pop')">🎨</button>
+        <button class="theme-mini-btn" onclick="applyAllTheme('photo')">🖼</button>
+        <button class="theme-mini-btn" onclick="applyAllTheme('grid')">📐</button>
+        <button class="theme-mini-btn" onclick="applyAllTheme('news')">📰</button>
+      </div>
+      <div style="display:flex;gap:3px;">
+        <button class="theme-mini-btn" onclick="applyAllTheme('collage')">✂️</button>
+        <button class="theme-mini-btn" onclick="applyAllTheme('retro')">📮</button>
+        <button class="theme-mini-btn" onclick="applyAllTheme('horror')">🩸</button>
+        <button class="theme-mini-btn" onclick="applyAllTheme('gothic')">⛪</button>
+        <button class="theme-mini-btn" onclick="applyAllTheme('punk')">⚡</button>
+      </div>
+    </div>
+    <div id="pageList"><div class="empty-list">まだページがありません</div></div>
+  </div>
+
+  <div id="sidebar-resizer" title="ドラッグして幅を調整"></div>
+  <!-- RIGHT PANEL -->
+  <div id="preview-panel">
+    <div class="preview-toolbar" translate="no">
+      <span class="translate-hint">💡 ブラウザの翻訳機能で右側が英語になります</span>
+      <span class="page-counter-badge" id="counterBadge">0 ページ</span>
+      <button class="btn-print" onclick="window.print()">🖨 印刷</button>
+      <button class="btn-print" style="background:#5a4a3a;" onclick="cleanupAllPages()">🗑 印刷完了・一覧から削除</button>
+    </div>
+    <div id="pageContainer">
+      <div class="a4-sheet theme-default">
+        <div class="a5-page a5-ja">
+          <div class="empty-state"><div class="icon">✦</div><p>データを追加してください</p></div>
+        </div>
+        <div class="a5-divider"></div>
+        <div class="a5-page a5-en">
+          <div class="empty-state"><div class="icon">✦</div><p>右側が英語訳になります</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const pages = [];
+
+const POP_VARIANTS = [
+  { headerBg:'#ff4d6d', headerTxt:'#fff', titleBg:'#fff9c4', accent:'#ff4d6d', sec:'#ff4d6d', longBg:'#f0fafa', longBorder:'#4ecdc4', artBg:'#fff9c4', infoBorder:'#ffd6de', dotColor:'#ff4d6d' },
+  { headerBg:'#2196f3', headerTxt:'#fff', titleBg:'#e8f5e9', accent:'#2196f3', sec:'#2196f3', longBg:'#f1f8e9', longBorder:'#66bb6a', artBg:'#e8f5e9', infoBorder:'#bbdefb', dotColor:'#2196f3' },
+  { headerBg:'#9c27b0', headerTxt:'#fff', titleBg:'#fff3e0', accent:'#9c27b0', sec:'#9c27b0', longBg:'#fff8f0', longBorder:'#ff9800', artBg:'#fff3e0', infoBorder:'#e1bee7', dotColor:'#9c27b0' },
+];
+
+function popBgSVG(color, idx) {
+  const pats = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><circle cx="10" cy="10" r="2.5" fill="${color}" opacity="0.07"/><circle cx="50" cy="50" r="2.5" fill="${color}" opacity="0.07"/><circle cx="90" cy="90" r="2.5" fill="${color}" opacity="0.07"/><circle cx="10" cy="90" r="2.5" fill="${color}" opacity="0.07"/><circle cx="90" cy="10" r="2.5" fill="${color}" opacity="0.07"/></svg>`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><line x1="0" y1="20" x2="20" y2="0" stroke="${color}" stroke-width="1" opacity="0.07"/></svg>`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30"><text x="15" y="20" text-anchor="middle" font-size="12" fill="${color}" opacity="0.08">★</text></svg>`,
+  ];
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(pats[idx % pats.length])}`;
+}
+
+function parseText(raw) {
+  const lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const d = { title:'', space:'', floor:'', period:'', genre:'', content:'', concept:'', artistName:'', members:'', profile:'', sns:'' };
+  const KEYS = { 'スペース':'space','会期':'period','ジャンル':'genre','展示内容':'content','展示コンセプト':'concept','アーティスト名':'artistName','メンバー構成':'members','プロフィール':'profile','SNS':'sns','展示情報':null,'アーティスト情報':null };
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^「.+」$/.test(line)) { d.title = line.replace(/^「|」$/g, ''); i++; continue; }
+    if (line === '展示情報' && i > 0 && !d.title) { d.title = lines[i-1]; i++; continue; }
+    if (/^https?:\/\//.test(line)) { if (!d.sns) d.sns = line; i++; continue; }
+    if (line === 'スペース') {
+      if (lines[i+1]) d.space = lines[i+1];
+      if (lines[i+2] && !/^展示|^アーティスト|^会期|^ジャンル|^スペース/.test(lines[i+2])) { d.floor = lines[i+2]; i += 3; } else { i += 2; }
+      continue;
+    }
+    if (KEYS[line] !== undefined) {
+      const key = KEYS[line];
+      if (key === null) { i++; continue; }
+      if (key === 'sns') { if (lines[i+1] && /^https?:\/\//.test(lines[i+1])) { d.sns = lines[i+1]; i += 2; } else { i++; } continue; }
+      i++;
+      let val = '';
+      while (i < lines.length && KEYS[lines[i]] === undefined && !/^「.+」$/.test(lines[i]) && !/^https?:\/\//.test(lines[i])) { val += (val ? '\n' : '') + lines[i]; i++; }
+      d[key] = val.trim();
+      continue;
+    }
+    i++;
+  }
+  return d;
+}
+
+function buildA5Inner(d, num, total, isJa, theme, pageIdx) {
+  const today = new Date().toLocaleDateString('ja-JP', { year:'numeric', month:'long', day:'numeric' });
+  const infoRows = [['会期', d.period], ['ジャンル', d.genre]].filter(([,v]) => v);
+  const infoHtml = infoRows.map(([k,v]) => `<div class="i-key">${k}</div><div class="i-val">${v}</div>`).join('');
+  const longBlocks = [['展示内容', d.content], ['展示コンセプト', d.concept]].filter(([,v]) => v);
+  const longHtml = longBlocks.map(([lbl, v]) => `<div class="long-blk"><div class="long-lbl">${lbl}</div><div class="long-body">${v.replace(/\n/g,'<br>')}</div></div>`).join('');
+
+  if (theme === 'default') {
+    return `
+      <div class="pg-header">
+        <div class="g-logo">Design Festa Gallery<span>Harajuku, Tokyo</span></div>
+      </div>
+      <div class="ttl-block">
+        <div class="ex-label">Exhibition</div>
+        <div class="ex-title">${d.title || '（タイトル未取得）'}</div>
+        <div class="ttl-line"></div>
+      </div>
+      ${infoRows.length ? `<div class="info-sec"><div class="sec-head">Details</div><div class="info-grid">${infoHtml}</div></div>` : ''}
+      ${longBlocks.length ? `<div class="long-sec">${longHtml}</div>` : ''}
+      <div class="art-sec">
+        <div class="sec-head">Artist</div>
+        <div class="art-inner">
+          <div>
+            ${buildArtistInner(d)}
+          </div>
+          ${buildSpaceBadge(d.space, d.floor)}
+        </div>
+      </div>`;
+  }
+
+  if (theme === 'pop') {
+    const v = POP_VARIANTS[pageIdx % POP_VARIANTS.length];
+    const bgUrl = popBgSVG(v.dotColor, pageIdx);
+    const infoHtmlPop = infoRows.map(([k,val]) => `<div class="i-key" style="color:${v.accent}">${k}</div><div class="i-val">${val}</div>`).join('');
+    const longHtmlPop = longBlocks.map(([lbl, val]) => `<div class="long-blk"><div class="long-lbl" style="background:${v.longBorder}">${lbl}</div><div class="long-body" style="background:${v.longBg};border-left-color:${v.longBorder}">${val.replace(/\n/g,'<br>')}</div></div>`).join('');
+    return `
+      <div class="pop-bg" style="background-image:url('${bgUrl}');background-repeat:repeat;"></div>
+      <div class="pop-content">
+        <div class="pg-header" style="background:${v.headerBg};margin:-12mm -12mm 5mm;padding:2.5mm 12mm;">
+          <div class="g-logo" style="color:${v.headerTxt}">Design Festa Gallery</div>
+        </div>
+        <div class="ttl-block" style="background:${v.titleBg}">
+          <div class="ex-label" style="color:${v.accent}">Exhibition</div>
+          <div class="ex-title">${d.title || '（タイトル未取得）'}</div>
+        </div>
+        ${infoRows.length ? `<div class="info-sec"><div class="sec-head" style="background:${v.sec}">Details</div><div class="info-grid">${infoHtmlPop}</div></div>` : ''}
+        ${longBlocks.length ? `<div class="long-sec">${longHtmlPop}</div>` : ''}
+        <div class="art-sec" style="background:${v.artBg}">
+          <div class="sec-head" style="background:${v.sec}">Artist</div>
+          <div class="art-inner">
+            <div>
+              ${buildArtistInner(d, { snsColor: v.accent })}
+            </div>
+            ${buildSpaceBadge(d.space, d.floor, { valColor: v.accent, lblColor: '#666', floorColor: '#666' })}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  if (theme === 'photo') {
+    const infoHtmlPhoto = infoRows.map(([k,v]) => `<div class="i-key">${k}</div><div class="i-val">${v}</div>`).join('');
+    const longHtmlPhoto = longBlocks.map(([lbl, v]) => `<div class="long-blk"><div class="long-lbl">${lbl}</div><div class="long-body">${v.replace(/\n/g,'<br>')}</div></div>`).join('');
+    return `
+      <div class="photo-stripe"></div>
+      <div class="pg-header">
+        <div class="g-logo">Design Festa Gallery<span>Harajuku, Tokyo</span></div>
+      </div>
+      <div class="ttl-block">
+        <div class="ttl-corner tl"></div><div class="ttl-corner tr"></div>
+        <div class="ttl-corner bl"></div><div class="ttl-corner br"></div>
+        <div class="ex-label">Exhibition</div>
+        <div class="ex-title">${d.title || '（タイトル未取得）'}</div>
+      </div>
+      ${infoRows.length ? `<div class="info-sec"><div class="sec-head">Details</div><div class="info-grid">${infoHtmlPhoto}</div></div>` : ''}
+      ${longBlocks.length ? `<div class="long-sec">${longHtmlPhoto}</div>` : ''}
+      <div class="art-sec">
+        <div class="photo-corner tl"></div><div class="photo-corner tr"></div>
+        <div class="photo-corner bl"></div><div class="photo-corner br"></div>
+        <div class="sec-head">Artist</div>
+        <div class="art-inner">
+          <div>
+            ${buildArtistInner(d)}
+          </div>
+          ${buildSpaceBadge(d.space, d.floor)}
+        </div>
+      </div>`;
+  }
+  if (theme === 'grid')    return buildGrid(d);
+  if (theme === 'news')    return buildNews(d);
+  if (theme === 'collage') return buildCollage(d);
+  if (theme === 'retro')   return buildRetro(d);
+  if (theme === 'horror')  return buildHorror(d);
+  if (theme === 'gothic')  return buildGothic(d);
+  if (theme === 'punk')    return buildPunk(d, pageIdx);
+}
+
+function buildHorror(d) {
+  const infoRows   = [['会期', d.period], ['ジャンル', d.genre]].filter(([,v]) => v);
+  const longBlocks = [['展示内容', d.content], ['展示コンセプト', d.concept]].filter(([,v]) => v);
+  return `
+    <div class="horror-tape"></div>
+    <div class="horror-blood-drip1"></div>
+    <div class="horror-blood-drip2"></div>
+    <div class="horror-blood-splat"></div>
+    <div class="horror-blood-dot1"></div>
+    <div class="horror-blood-dot2"></div>
+    <div class="pg-header"><div class="g-logo">Design Festa Gallery</div></div>
+    <div class="ttl-block">
+      <div class="ex-label">Exhibition</div>
+      <div class="ex-title">${d.title||'（タイトル未取得）'}</div>
+      <div class="ttl-line"></div>
+    </div>
+    ${infoRows.length ? `<div class="info-sec"><div class="sec-head">Details</div><div class="info-grid">${infoRows.map(([k,v])=>`<div class="i-key">${k}</div><div class="i-val">${v}</div>`).join('')}</div></div>` : ''}
+    ${longBlocks.length ? `<div class="long-sec">${longBlocks.map(([lbl,v])=>`<div class="long-blk"><div class="long-lbl">${lbl}</div><div class="long-body">${v.replace(/\n/g,'<br>')}</div></div>`).join('')}</div>` : ''}
+    <div class="art-sec"><div class="art-inner"><div>${buildArtistInner(d)}</div>${buildSpaceBadge(d.space, d.floor)}</div></div>`;
+}
+
+function buildGothic(d) {
+  const infoRows   = [['会期', d.period], ['ジャンル', d.genre]].filter(([,v]) => v);
+  const longBlocks = [['展示内容', d.content], ['展示コンセプト', d.concept]].filter(([,v]) => v);
+  return `
+    <div class="gothic-arch"></div>
+    <div class="gothic-corner tl"></div><div class="gothic-corner tr"></div>
+    <div class="gothic-corner bl"></div><div class="gothic-corner br"></div>
+    <div class="pg-header">
+      <div class="hd-deco">Design Festa Gallery — Harajuku</div>
+      <div class="g-logo">DESIGN FESTA GALLERY</div>
+    </div>
+    <div class="ttl-block">
+      <div class="ex-label">Exhibition</div>
+      <div class="gothic-ornament">✦ ✦ ✦</div>
+      <div class="ex-title">${d.title||'（タイトル未取得）'}</div>
+    </div>
+    ${infoRows.length ? `<div class="info-sec"><div class="sec-head">Details</div><div class="info-grid">${infoRows.map(([k,v])=>`<div class="i-key">${k}</div><div class="i-val">${v}</div>`).join('')}</div></div>` : ''}
+    ${longBlocks.length ? `<div class="long-sec">${longBlocks.map(([lbl,v])=>`<div class="long-blk"><div class="long-lbl">${lbl}</div><div class="long-body">${v.replace(/\n/g,'<br>')}</div></div>`).join('')}</div>` : ''}
+    <div class="art-sec">
+      <div class="art-ornament">— ✦ —</div>
+      <div class="art-inner"><div>${buildArtistInner(d)}</div>${buildSpaceBadge(d.space, d.floor)}</div>
+    </div>`;
+}
+
+function buildPunk(d, pageIdx) {
+  const variantIdx = pageIdx % 3;
+  const infoRows   = [['PERIOD', d.period], ['GENRE', d.genre]].filter(([,val]) => val);
+  const longBlocks = [['// CONTENT', d.content], ['// CONCEPT', d.concept]].filter(([,val]) => val);
+  const num = String((pageIdx % 99) + 1).padStart(2, '0');
+  return `
+    <div class="punk-v${variantIdx}">
+    <div class="pg-header">
+      <div class="g-logo">DESIGN FESTA<br>GALLERY</div>
+      <div class="issue">No.${num}</div>
+    </div>
+    <div class="ttl-block">
+      <div class="ex-label">// EXHIBITION</div>
+      <div class="ex-title">${d.title||'（タイトル未取得）'}</div>
+      <div class="ttl-line"></div>
+    </div>
+    ${infoRows.length ? `<div class="info-band"><div class="info-grid">${infoRows.map(([k,val])=>`<div class="i-key">${k}</div><div class="i-val">${val}</div>`).join('')}</div></div>` : ''}
+    ${longBlocks.length ? `<div class="long-sec">${longBlocks.map(([lbl,val])=>`<div class="long-blk"><div class="long-lbl">${lbl}</div><div class="long-body">${val.replace(/\n/g,'<br>')}</div></div>`).join('')}</div>` : ''}
+    <div class="art-sec"><div class="art-inner"><div>${buildArtistInner(d)}</div>${buildSpaceBadge(d.space, d.floor)}</div></div>
+    </div>`;
+}
+
+function buildGrid(d) {
+  const infoRows = [['会期', d.period], ['ジャンル', d.genre]].filter(([,v]) => v);
+  const longBlocks = [['展示内容', d.content], ['展示コンセプト', d.concept]].filter(([,v]) => v);
+  return `
+    <div class="pg-header"><div class="g-logo">Design Festa Gallery</div><div class="grid-dim">A5 — 148.5×210mm</div></div>
+    <div class="ttl-block"><div class="ex-label">Exhibition</div><div class="ex-title">${d.title || '（タイトル未取得）'}</div></div>
+    ${infoRows.length ? `<div class="info-sec"><div class="sec-head">Details</div><div class="info-grid">${infoRows.map(([k,v])=>`<div class="i-key">${k}</div><div class="i-val">${v}</div>`).join('')}</div></div>` : ''}
+    ${longBlocks.length ? `<div class="long-sec">${longBlocks.map(([lbl,v])=>`<div class="long-blk"><div class="long-lbl">${lbl}</div><div class="long-body">${v.replace(/\n/g,'<br>')}</div></div>`).join('')}</div>` : ''}
+    <div class="art-sec"><div class="art-inner"><div>${buildArtistInner(d)}</div>${buildSpaceBadge(d.space, d.floor)}</div></div>`;
+}
+
+function buildNews(d) {
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('ja-JP',{year:'numeric',month:'long'});
+  return `
+    <div class="news-masthead">
+      <div class="masthead-title">Design Festa Gallery</div>
+      <div class="masthead-sub">Harajuku Exhibition Bulletin</div>
+      <div class="dateline"><span>${dateStr}</span><span>${d.period||''}</span><span>Harajuku, Tokyo</span></div>
+    </div>
+    <div class="news-cols">
+      <div class="news-col">
+        <div class="ex-title">${d.title||'（タイトル未取得）'}</div>
+        <div class="byline">${d.artistName||'—'} · Space ${d.space||'—'}</div>
+        ${d.content?`<div class="kicker">展示内容</div><div class="news-body">${d.content.replace(/\n/g,'<br>')}</div>`:''}
+        ${d.concept?`<div class="kicker">コンセプト</div><div class="news-body">${d.concept.replace(/\n/g,'<br>')}</div>`:''}
+      </div>
+      <div class="col-div"></div>
+      <div class="news-col">
+        <div class="kicker">展示情報</div>
+        ${d.period?`<div class="info-item"><span class="ik">会期</span><span class="iv">${d.period}</span></div>`:''}
+        ${d.genre?`<div class="info-item"><span class="ik">ジャンル</span><span class="iv">${d.genre}</span></div>`:''}
+        ${d.floor?`<div class="info-item"><span class="ik">フロア</span><span class="iv">${d.floor}</span></div>`:''}
+        <div class="art-block">
+          ${buildArtistInner(d)}
+          ${d.space ? (() => {
+            const spaces = d.space.split(',').map(s=>s.trim()).filter(Boolean);
+            const n = spaces.length;
+            if (n <= 3) return `<div class="space-box">${spaces.join(' / ')}${d.floor?' · '+d.floor:''}</div>`;
+            if (n <= 6) return `<div class="space-box">${spaces.join(', ')}</div>`;
+            return `<div class="space-box">×${n} spaces</div>`;
+          })() : ''}
+        </div>
+      </div>
+    </div>`;
+}
+
+function buildCollage(d) {
+  const infoRows = [['会期', d.period], ['ジャンル', d.genre]].filter(([,v]) => v);
+  const longBlocks = [['展示内容', d.content], ['展示コンセプト', d.concept]].filter(([,v]) => v);
+  return `
+    <div class="tape"></div><div class="tape2"></div>
+    <div class="coll-header"><div class="g-logo">DESIGN FESTA GALLERY</div><div class="issue">issue no.${String(Math.floor(Math.random()*99)+1).padStart(2,'0')}</div></div>
+    <div class="ttl-block"><div class="ex-label">EXHIBITION</div><div class="ex-title">${d.title||'（タイトル未取得）'}</div><div class="ttl-line"></div></div>
+    ${infoRows.length ? `<div class="info-strip">${infoRows.map(([k,v])=>`<div class="info-strip-row"><span class="ik">${k}</span><span class="iv">${v}</span></div>`).join('')}</div>` : ''}
+    ${longBlocks.length ? `<div class="long-sec">${longBlocks.map(([lbl,v])=>`<div class="long-blk"><div class="long-lbl">${lbl}</div><div class="long-body">${v.replace(/\n/g,'<br>')}</div></div>`).join('')}</div>` : ''}
+    <div class="art-sec"><div class="art-inner"><div>${buildArtistInner(d)}</div>${buildSpaceBadge(d.space, d.floor)}</div></div>`;
+}
+
+function buildRetro(d) {
+  const today = new Date();
+  const mm = String(today.getMonth()+1).padStart(2,'0');
+  const yyyy = today.getFullYear();
+  const infoRows = [['会期', d.period], ['ジャンル', d.genre]].filter(([,v]) => v);
+  const longBlocks = [['展示内容', d.content], ['展示コンセプト', d.concept]].filter(([,v]) => v);
+  return `
+    <div class="stamp-border"></div>
+    <div class="postmark"><div class="pm-txt">DESIGN<br>FESTA</div><div class="pm-date">${mm}.${yyyy}</div><div class="pm-txt">GALLERY</div></div>
+    <div class="pg-header"><div class="g-logo">Design Festa Gallery<br>原宿 · HARAJUKU</div><div class="stamp-box"><div class="stamp-inner">DFG</div></div></div>
+    <div class="ttl-block"><div class="ex-label">Exhibition</div><div class="ex-title">${d.title||'（タイトル未取得）'}</div><div class="ttl-line">✦ · ✦</div></div>
+    ${infoRows.length ? `<div class="info-sec"><div class="sec-head">展示情報</div><div class="info-grid">${infoRows.map(([k,v])=>`<div class="i-key">${k}</div><div class="i-val">${v}</div>`).join('')}</div></div>` : ''}
+    ${longBlocks.length ? `<div class="long-sec">${longBlocks.map(([lbl,v])=>`<div class="long-blk"><div class="long-lbl">${lbl}</div><div class="long-body">${v.replace(/\n/g,'<br>')}</div></div>`).join('')}</div>` : ''}
+    <div class="art-sec"><div class="art-inner"><div>${buildArtistInner(d)}</div>${buildSpaceBadge(d.space, d.floor)}</div></div>`;
+}
+
+function buildSheet(d, theme, pageIdx, num, total, orient, bodySize) {
+  const inner   = buildA5Inner(d, num, total, true,  theme, pageIdx);
+  const innerEn = buildA5Inner(d, num, total, false, theme, pageIdx);
+  const sizeStyle = bodySize ? ` style="--long-body-size:${bodySize}px"` : '';
+  if (orient === 'portrait') {
+    return `
+    <div class="a4-sheet-portrait theme-${theme}" id="page-${pageIdx}"${sizeStyle}>
+      <div class="a5-land a5-ja" translate="no">${inner}</div>
+      <div class="a5-divider-h"></div>
+      <div class="a5-land a5-en">${innerEn}</div>
+    </div>`;
+  }
+  return `
+    <div class="a4-sheet theme-${theme}" id="page-${pageIdx}"${sizeStyle}>
+      <div class="a5-page a5-ja" translate="no">${inner}</div>
+      <div class="a5-divider"></div>
+      <div class="a5-page a5-en">${innerEn}</div>
+    </div>`;
+}
+
+function changeTheme(idx, theme) {
+  pages[idx].theme = theme;
+  renderAll();
+}
+
+function changeBodySize(idx, delta) {
+  const base = pages[idx].bodySize != null ? pages[idx].bodySize : longBodySize;
+  pages[idx].bodySize = Math.round((base + delta) * 10) / 10;
+  pages[idx].bodySize = Math.min(20, Math.max(6, pages[idx].bodySize));
+  renderAll();
+}
+
+function resetBodySize(idx) {
+  pages[idx].bodySize = null;
+  renderAll();
+}
+
+function changeOrient(idx, orient) {
+  pages[idx].orient = orient;
+  renderAll();
+}
+
+function scrollToPage(idx) {
+  const el = document.getElementById('page-' + idx);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.querySelectorAll('.page-list-item').forEach((item, i) => item.classList.toggle('active-item', i === idx));
+}
+
+// モジュールからアクセスできるようにグローバルに公開
+window._pages = pages;
+window._parseText = parseText;
+window._renderAll = renderAll;
+
+// ===== SIDEBAR RESIZE =====
+(function() {
+  const resizer = document.getElementById('sidebar-resizer');
+  const app = document.getElementById('app');
+  let startX, startW;
+  resizer.addEventListener('mousedown', e => {
+    startX = e.clientX;
+    startW = parseInt(getComputedStyle(app).gridTemplateColumns.split(' ')[0]);
+    resizer.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!resizer.classList.contains('dragging')) return;
+    const w = Math.min(700, Math.max(300, startW + e.clientX - startX));
+    app.style.setProperty('--sidebar-w', w + 'px');
+  });
+  document.addEventListener('mouseup', () => {
+    resizer.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  });
+})();
+
+
+// キュー更新はFirestoreモジュールで処理
+
+// ===== 展示内容フォントサイズ =====
+let longBodySize = 13;
+function adjustLongBodySize(delta) {
+  longBodySize = Math.round((longBodySize + delta) * 10) / 10;
+  longBodySize = Math.min(20, Math.max(6, longBodySize));
+  // 個別設定もすべて一括値に揃える
+  pages.forEach(p => { p.bodySize = null; });
+  document.body.style.setProperty('--long-body-size', longBodySize + 'px');
+  document.getElementById('longBodySizeLabel').textContent = longBodySize + 'px';
+  renderAll();
+}
+
+
+(function() {
+  // adminと共通のFirestoreブックマーク（スペース名p/span対応）
+  const code = "javascript:(function(){const container=document.querySelector('[class*=\"DetailContainer\"]');if(!container){alert('対象要素が見つかりませんでした');return;}const results=[];container.querySelectorAll('*').forEach(el=>{if(el.children.length===0){const t=el.textContent.trim();if(t&&t.length>0&&t.length<1000){const s=window.getComputedStyle(el);if(s.display!=='none'&&s.visibility!=='hidden')results.push(t);}}});const unique=[...new Set(results)].filter(t=>t!=='一覧に戻る');const spaceLabel=[...container.querySelectorAll('[class*=\"InfoDetailLabel\"]')].find(el=>el.textContent.trim()==='スペース');if(spaceLabel){const spaceVal=spaceLabel.parentElement?.querySelector('[class*=\"InfoDetailValue\"]')||spaceLabel.nextElementSibling;if(spaceVal){const parts=[...spaceVal.querySelectorAll('p,span')].map(el=>el.textContent.trim()).filter(Boolean);const correctSpace=parts.length>0?parts.join(' '):spaceVal.textContent.trim();const wrongSpace=spaceVal.textContent.trim();const idx=unique.indexOf(wrongSpace);if(idx!==-1&&correctSpace!==wrongSpace)unique.splice(idx,1,...correctSpace.split(' ').filter(Boolean));}}const text=unique.join('\\n');const url='https://firestore.googleapis.com/v1/projects/dfg-message-board/databases/(default)/documents/import_queue';fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{raw:{stringValue:text},isJson:{booleanValue:false},createdAt:{stringValue:new Date().toISOString()},imported:{booleanValue:false}}})}).then(r=>{if(r.ok){fetch(url+'?pageSize=100').then(r2=>r2.json()).then(d2=>{const count=(d2.documents||[]).filter(d=>d.fields&&d.fields.imported&&d.fields.imported.booleanValue===false).length;const toast=document.createElement('div');toast.style.cssText='position:fixed;top:16px;left:50%;transform:translateX(-50%);background:#2a7a4a;color:#fff;padding:10px 20px;border-radius:6px;font-family:sans-serif;font-size:13px;z-index:99999;opacity:1;transition:opacity 0.5s;white-space:nowrap;';toast.textContent='\u2713 \u30ad\u30e5\u30fc\u306b\u8ffd\u52a0\u3057\u307e\u3057\u305f\uff08\u8a08'+count+'\u4ef6\uff09';document.body.appendChild(toast);setTimeout(()=>{toast.style.opacity='0';setTimeout(()=>toast.remove(),500);},2500);}).catch(()=>{const toast=document.createElement('div');toast.style.cssText='position:fixed;top:16px;left:50%;transform:translateX(-50%);background:#2a7a4a;color:#fff;padding:10px 20px;border-radius:6px;font-family:sans-serif;font-size:13px;z-index:99999;opacity:1;transition:opacity 0.5s;white-space:nowrap;';toast.textContent='\u2713 \u30ad\u30e5\u30fc\u306b\u8ffd\u52a0\u3057\u307e\u3057\u305f';document.body.appendChild(toast);setTimeout(()=>{toast.style.opacity='0';setTimeout(()=>toast.remove(),500);},2500);});}else{alert('\u9001\u4fe1\u306b\u5931\u6557\u3057\u307e\u3057\u305f');}}).catch(()=>alert('\u9001\u4fe1\u306b\u5931\u6557\u3057\u307e\u3057\u305f'));})();";
+  const el = document.getElementById('bookmarkletCode');
+  if (el) el.value = code;
+})();
+
+// ===== スペース表示 =====
+function detectZone(spaces) {
+  // Art Corner系はフロア名つきなら確定
+  const hasAC2F = spaces.some(s => /art corner 2f/i.test(s));
+  const hasAC3F = spaces.some(s => /art corner 3f/i.test(s));
+  const hasW    = spaces.some(s => /^W-\d+$/i.test(s));
+  const hasE    = spaces.some(s => /^E-\d+$/i.test(s));
+  const has1x   = spaces.some(s => /^1-[A-Z]$/i.test(s));
+  const has2x   = spaces.some(s => /^2-[A-Z]$/i.test(s));
+  const has10x  = spaces.some(s => /^101(-[ab])?$|^102$/.test(s));
+  const has20x  = spaces.some(s => /^20[1-4]$/.test(s));
+  const has30x  = spaces.some(s => /^30[1-4]$/.test(s));
+  if (hasW)   return 'artpieceWEST';
+  if (hasE)   return 'artpieceEAST';
+  if (has1x)  return 'WEST館 1F';
+  if (has2x)  return 'WEST館 2F';
+  if (has10x) return 'EAST館 1F';
+  if (has20x || hasAC2F) return 'EAST館 2F';
+  if (has30x || hasAC3F) return 'EAST館 3F';
+  return '';
+}
+
+function applyAllTheme(theme) {
+  pages.forEach(p => p.theme = theme);
+  renderAll();
+}
+
+function buildArtistInner(d, opts = {}) {
+  const { nameColor = '', metaColor = '', snsColor = '' } = opts;
+  const nameStyle  = nameColor  ? ` style="color:${nameColor}"` : '';
+  const metaStyle  = metaColor  ? ` style="color:${metaColor}"` : '';
+
+  const membersHtml = d.members
+    ? `<div class="members-list">${d.members.split(',').map(m => m.trim()).filter(Boolean).map(m => `<span class="member-tag"${metaStyle}>${m}</span>`).join('')}</div>`
+    : '';
+
+  // SNSはQRコードプレースホルダー（data属性にURLを持たせてあとでJS生成）
+  const snsHtml = d.sns
+    ? `<div class="qr-wrap" data-qr="${d.sns}"><div class="qr-img"></div><div class="qr-label">${d.sns.replace(/^https?:\/\//, '')}</div></div>`
+    : '';
+
+  return `
+    <div class="art-name"${nameStyle}>${d.artistName || '—'}</div>
+    ${membersHtml}
+    ${d.profile ? `<div class="art-meta"${metaStyle}>${d.profile}</div>` : ''}
+    ${snsHtml}`;
+}
+
+function generateQRs() {
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.qr-wrap').forEach(wrap => {
+      const url = wrap.dataset.qr;
+      const container = wrap.querySelector('.qr-img');
+      if (!url || !container || container.children.length > 0) return;
+      try {
+        new QRCode(container, {
+          text: url,
+          width: 61,   // ~16mm @ 96dpi
+          height: 61,
+          colorDark: '#000000',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      } catch(e) { container.textContent = url; }
+    });
+  });
+}
+
+function buildSpaceBadge(spaceStr, floor, opts = {}) {
+  if (!spaceStr) return '';
+  const { valColor = '', lblColor = '', floorColor = '' } = opts;
+  const valStyle  = valColor  ? ` style="color:${valColor}"` : '';
+  const lblStyle  = lblColor  ? ` style="color:${lblColor}"` : '';
+  const flrStyle  = floorColor ? ` style="color:${floorColor}"` : '';
+
+  const spaces = spaceStr.split(',').map(s => s.trim()).filter(Boolean);
+  const n = spaces.length;
+
+  let inner = '';
+  if (n === 1) {
+    // 1個：大きく
+    inner = `<div class="sp-val"${valStyle}>${spaces[0]}</div>`;
+  } else if (n <= 3) {
+    // 2〜3個：スラッシュ区切り・中サイズ
+    inner = `<div class="sp-val-sm"${valStyle}>${spaces.join(' / ')}</div>`;
+  } else if (n <= 6) {
+    // 4〜6個：グリッド
+    inner = `<div class="sp-val-grid">${spaces.map(s=>`<span${valStyle}>${s}</span>`).join('')}</div>`;
+  } else {
+    // 7個以上：件数＋ゾーン名
+    const zone = detectZone(spaces);
+    inner = `<div class="sp-count"${valStyle}>×${n}</div>${zone ? `<div class="sp-count-zone"${flrStyle}>${zone}</div>` : ''}`;
+  }
+
+  const floorHtml = floor && n <= 3 ? `<div class="sp-floor"${flrStyle}>${floor}</div>` : '';
+  return `<div class="sp-badge"><div class="sp-lbl"${lblStyle}>Space</div>${inner}${floorHtml}</div>`;
+}
+
+
+function autoFitPages() {
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.a5-page').forEach(page => {
+      page.style.fontSize = '';
+      if (page.scrollHeight <= page.offsetHeight + 2) return;
+      let fontSize = 10;
+      while (page.scrollHeight > page.offsetHeight + 2 && fontSize > 5.5) {
+        fontSize -= 0.5;
+        page.style.fontSize = fontSize + 'px';
+      }
+    });
+  });
+}
+
+
+function deletePage(idx) {
+  const page = pages[idx];
+  if (page && page.docId && window.deleteGeneratorPageDoc) {
+    window.deleteGeneratorPageDoc(page.docId);
+    // renderAllはFirestoreのonSnapshotが検知して自動的に呼ばれる
+  } else {
+    pages.splice(idx, 1);
+    renderAll();
+  }
+}
+
+function cleanupAllPages() {
+  if (pages.length === 0) { alert('削除するページがありません'); return; }
+  const ok = confirm('表示中の全ページ（' + pages.length + '件）を一覧から削除しますか？');
+  if (!ok) return;
+  const docIds = pages.filter(p => p.docId).map(p => p.docId);
+  docIds.forEach(docId => {
+    if (window.deleteGeneratorPageDoc) window.deleteGeneratorPageDoc(docId);
+  });
+}
+
+function renderAll() {
+  const total = pages.length;
+  document.getElementById('pageCount').textContent = total + ' ページ';
+  document.getElementById('counterBadge').textContent = total + ' ページ';
+  document.getElementById('bulkTheme').style.display = total > 0 ? 'flex' : 'none';
+
+  const listEl = document.getElementById('pageList');
+  listEl.innerHTML = total === 0
+    ? '<div class="empty-list">まだページがありません</div>'
+    : pages.map((p, i) => `
+        <div class="page-list-item" id="list-item-${i}">
+          <div class="item-main-row" onclick="scrollToPage(${i})">
+            <span class="page-list-num">${i+1}</span>
+            <div class="page-list-info">
+              <div class="page-list-title">${p.data.title || '（タイトルなし）'}</div>
+              <div class="page-list-sub">${[p.data.space, p.data.floor, p.data.period].filter(Boolean).join(' · ')}</div>
+            </div>
+            <button class="btn-delete" onclick="event.stopPropagation();deletePage(${i})">×</button>
+          </div>
+          <div class="item-theme-switcher">
+            <span class="theme-switch-label">向き</span>
+            <div class="orient-toggle">
+              <button class="orient-btn ${p.orient==='landscape'?'active-orient':''}" onclick="changeOrient(${i},'landscape')">⬜ 横</button>
+              <button class="orient-btn ${p.orient==='portrait'?'active-orient':''}" onclick="changeOrient(${i},'portrait')">⬛ 縦</button>
+            </div>
+          </div>
+          <div class="item-theme-switcher" style="justify-content:space-between;">
+            <span class="theme-switch-label" style="width:auto;margin-bottom:0;">本文サイズ</span>
+            <div style="display:flex;align-items:center;gap:5px;">
+              ${p.bodySize!=null?`<button onclick="resetBodySize(${i})" style="font-size:9px;color:#888;background:none;border:1px solid #2a2a2a;border-radius:3px;cursor:pointer;padding:1px 5px;white-space:nowrap;">初期値に戻す</button>`:''}
+              <button onclick="changeBodySize(${i},-0.5)" style="width:20px;height:20px;background:#0a0a0a;border:1px solid #2a2a2a;border-radius:3px;color:#aaa;font-size:13px;cursor:pointer;line-height:1;">−</button>
+              <span style="font-size:11px;color:#e0dbd3;min-width:30px;text-align:center;">${p.bodySize!=null?p.bodySize+'px':longBodySize+'px'}</span>
+              <button onclick="changeBodySize(${i},0.5)" style="width:20px;height:20px;background:#0a0a0a;border:1px solid #2a2a2a;border-radius:3px;color:#aaa;font-size:13px;cursor:pointer;line-height:1;">＋</button>
+            </div>
+          </div>
+          <div class="item-theme-switcher">
+            <span class="theme-switch-label">テーマ</span>
+            <div class="theme-mini-row">
+              <button class="theme-mini-btn ${p.theme==='default'?'active-theme':''}" onclick="changeTheme(${i},'default')">📄 デフォルト</button>
+              <button class="theme-mini-btn ${p.theme==='pop'?'active-theme':''}" onclick="changeTheme(${i},'pop')">🎨 ポップ</button>
+              <button class="theme-mini-btn ${p.theme==='photo'?'active-theme':''}" onclick="changeTheme(${i},'photo')">🖼 フォト</button>
+              <button class="theme-mini-btn ${p.theme==='grid'?'active-theme':''}" onclick="changeTheme(${i},'grid')">📐 グリッド</button>
+              <button class="theme-mini-btn ${p.theme==='news'?'active-theme':''}" onclick="changeTheme(${i},'news')">📰 新聞</button>
+            </div>
+            <div class="theme-mini-row" style="margin-top:3px">
+              <button class="theme-mini-btn ${p.theme==='collage'?'active-theme':''}" onclick="changeTheme(${i},'collage')">✂️ コラージュ</button>
+              <button class="theme-mini-btn ${p.theme==='retro'?'active-theme':''}" onclick="changeTheme(${i},'retro')">📮 レトロ</button>
+              <button class="theme-mini-btn ${p.theme==='horror'?'active-theme':''}" onclick="changeTheme(${i},'horror')">🩸 ホラー</button>
+              <button class="theme-mini-btn ${p.theme==='gothic'?'active-theme':''}" onclick="changeTheme(${i},'gothic')">⛪ ゴシック</button>
+              <button class="theme-mini-btn ${p.theme==='punk'?'active-theme':''}" onclick="changeTheme(${i},'punk')">⚡ パンク</button>
+            </div>
+          </div>
+        </div>`).join('');
+
+  const container = document.getElementById('pageContainer');
+  container.innerHTML = total === 0
+    ? `<div class="a4-sheet theme-default"><div class="a5-page a5-ja"><div class="empty-state"><div class="icon">✦</div><p>データを追加してください</p></div></div><div class="a5-divider"></div><div class="a5-page a5-en"><div class="empty-state"><div class="icon">✦</div><p>右側が英語訳になります</p></div></div></div>`
+    : pages.map((p, i) => buildSheet(p.data, p.theme, i, i+1, total, p.orient, p.bodySize)).join('');
+
+  autoFitPages();
+  generateQRs();
+}
+</script>
+</body>
+</html>
