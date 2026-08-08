@@ -328,11 +328,21 @@ function initJQuery($, years, currentYear, minYear, byYear) {
     setWrapperHeight();
   }
 
+  // その年度の展示が1件でもあり、かつ全部「終了」なら自動でON、
+  // 1件でも終了以外があれば自動でOFFにする
+  function autoSetShowEnded(year) {
+    const items = byYear[year] || [];
+    const allEnded = items.length > 0 && items.every(ex => autoStatus(ex) === '終　了');
+    showEnded = allEnded;
+    showEndedBtn.text(showEnded ? '終了を非表示' : '終了を表示');
+  }
+
   function switchYear(newYear, direction) {
     if (!years.includes(newYear)) return;
     const oldYear = cur;
     cur = newYear;
     updateNav(direction);
+    autoSetShowEnded(cur);
 
     const oldTable = tables[oldYear]?.container;
     const newTable = tables[newYear]?.container;
@@ -375,8 +385,7 @@ function initJQuery($, years, currentYear, minYear, byYear) {
 
   resetBtn.off('click').on('click', function() {
     statusFilter.val(''); monthFilter.val('');
-    showEnded = false;
-    showEndedBtn.text('終了を表示');
+    autoSetShowEnded(cur);
     applyFilter(cur);
   });
 
@@ -388,6 +397,7 @@ function initJQuery($, years, currentYear, minYear, byYear) {
 
   // 初期化
   updateNav();
+  autoSetShowEnded(cur);
   applyFilter(cur);
 }
 
