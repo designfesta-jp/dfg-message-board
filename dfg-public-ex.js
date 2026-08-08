@@ -164,8 +164,11 @@ async function main() {
   });
 
   const years = Object.keys(byYear).map(Number).sort((a, b) => a - b);
-  const currentYear = Math.max(...years);
   const minYear = Math.min(...years);
+  // 初期表示は実際の「今年」を優先。今年の予定がまだ無ければ、
+  // 従来通りデータがある最新年にフォールバックする
+  const thisCalendarYear = new Date().getFullYear();
+  const currentYear = years.includes(thisCalendarYear) ? thisCalendarYear : Math.max(...years);
 
   // table-wrapperを取得
   const wrapper = document.querySelector('.table-wrapper');
@@ -251,6 +254,9 @@ function initJQuery($, years, currentYear, minYear, byYear) {
     prevBtn.prop('disabled', cur === minYear);
     nextBtn.prop('disabled', cur === years[years.length - 1]);
     yearDisp.text(cur + '年');
+    // 今表示している年より後に予定がある場合、次へボタンに通知バッジを出す
+    const hasFuture = years.some(y => y > cur);
+    nextBtn.toggleClass('has-next', hasFuture);
   }
 
   function applyFilter(year) {
