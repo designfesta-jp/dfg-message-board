@@ -241,22 +241,54 @@ function initJQuery($, years, currentYear, minYear, byYear) {
     '企画中': 'highlight-planning'
   };
 
-  const prevBtn = jQuery('#prev-year');
-  const nextBtn = jQuery('#next-year');
-  const yearDisp = jQuery('#year-display');
+  const yearNav = jQuery('#year-navigation');
   const statusFilter = jQuery('#status-filter');
   const monthFilter = jQuery('#month-filter');
   const resetBtn = jQuery('#reset-filter');
   const showEndedBtn = jQuery('#show-ended');
   let showEnded = false;
 
+  // その年に募集中/企画中の展示があるかを見て、付箋バッジの文言を決める
+  function computeBadge(year) {
+    const items = byYear[year] || [];
+    const hasRecruiting = items.some(ex => autoStatus(ex) === '募集中');
+    if (hasRecruiting) return '募集中あり';
+    const hasPlanning = items.some(ex => autoStatus(ex) === '企画中');
+    if (hasPlanning) return '企画中あり';
+    return null;
+  }
+
+  // 前年度/今年度/来年度の3枚カードを常に描画(データが増えても3枚だけ)
   function updateNav() {
-    prevBtn.prop('disabled', cur === minYear);
-    nextBtn.prop('disabled', cur === years[years.length - 1]);
-    yearDisp.text(cur + '年');
-    // 今表示している年より後に予定がある場合、次へボタンに通知バッジを出す
-    const hasFuture = years.some(y => y > cur);
-    nextBtn.toggleClass('has-next', hasFuture);
+    yearNav.empty();
+    const positions = [
+      { year: cur - 1, label: '前年度' },
+      { year: cur,     label: '今年度' },
+      { year: cur + 1, label: '来年度' }
+    ];
+    positions.forEach(pos => {
+      const hasData = years.includes(pos.year);
+      const isActive = pos.year === cur;
+      const badge = hasData ? computeBadge(pos.year) : null;
+
+      const card = jQuery('<div class="year-card"></div>')
+        .toggleClass('is-active', isActive)
+        .toggleClass('is-inactive', !hasData);
+
+      card.append('<span class="year-card-label">' + pos.label + '</span>');
+      card.append('<span class="year-card-num">' + pos.year + '年</span>');
+      if (badge) {
+        card.append('<span class="year-card-badge">' + badge + '</span>');
+      }
+
+      if (hasData && !isActive) {
+        card.on('click', function() {
+          switchYear(pos.year, pos.year > cur ? 'next' : 'prev');
+        });
+      }
+
+      yearNav.append(card);
+    });
   }
 
   function applyFilter(year) {
@@ -333,14 +365,6 @@ function initJQuery($, years, currentYear, minYear, byYear) {
     showEnded = !showEnded;
     jQuery(this).text(showEnded ? '終了を非表示' : '終了を表示');
     applyFilter(cur);
-  });
-
-  prevBtn.off('click').on('click', function() {
-    if (cur > minYear) switchYear(cur - 1, 'prev');
-  });
-
-  nextBtn.off('click').on('click', function() {
-    if (years.includes(cur + 1)) switchYear(cur + 1, 'next');
   });
 
   // 初期化
