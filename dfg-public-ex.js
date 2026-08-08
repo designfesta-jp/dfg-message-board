@@ -259,33 +259,41 @@ function initJQuery($, years, currentYear, minYear, byYear) {
   }
 
   // 前年度/今年度/来年度の候補のうち、データがある年だけカードを生成する(最大3枚)
+  // 常に3スロット(左=前年度候補/中央=選択中/右=来年度候補)を生成する。
+  // データが無いスロットは中身を作らず空白のまま。選択中の年度は常に中央。
   function renderYearCards() {
     yearNav.empty();
-    const candidates = [cur - 1, cur, cur + 1];
-    candidates.forEach(y => {
-      if (!years.includes(y)) return; // データが無い年はカード自体を作らない
-      const isActive = y === cur;
-      const badge = computeBadge(y);
+    const slots = [cur - 1, cur, cur + 1];
+    slots.forEach(y => {
+      const slot = jQuery('<div class="year-slot"></div>');
+      if (years.includes(y)) {
+        const isActive = y === cur;
+        const badge = computeBadge(y);
 
-      const card = jQuery('<div class="year-card"></div>')
-        .toggleClass('is-active', isActive);
+        const card = jQuery('<div class="year-card"></div>')
+          .toggleClass('is-active', isActive);
 
-      card.append('<span class="year-card-num">' + y + '年</span>');
-      if (badge) {
-        card.append('<span class="year-card-badge">' + badge + '</span>');
+        card.append('<span class="year-card-num">' + y + '年</span>');
+        if (badge) {
+          // バッジはパネルの外側・右上に絶対配置(パネル本体のサイズには影響しない)
+          card.append('<span class="year-card-badge">' + badge + '</span>');
+        }
+
+        if (!isActive) {
+          card.on('click', function() {
+            switchYear(y, y > cur ? 'next' : 'prev');
+          });
+        }
+
+        slot.append(card);
       }
-
-      if (!isActive) {
-        card.on('click', function() {
-          switchYear(y, y > cur ? 'next' : 'prev');
-        });
-      }
-
-      yearNav.append(card);
+      yearNav.append(slot);
     });
   }
 
-  // direction指定時は、表本体と同じ考え方でスライドしながら切り替える
+  // direction指定時は、フェードせずtransformのスライドのみで切り替える
+  // (表本体と違い、年度カードは常に2〜3枚同時に見えているので、
+  //  1枚をフェードイン/アウトさせる表本体の演出は不要)
   function updateNav(direction) {
     if (!direction) {
       renderYearCards();
@@ -293,12 +301,12 @@ function initJQuery($, years, currentYear, minYear, byYear) {
     }
     const outOffset  = direction === 'next' ? '-20px' : '20px';
     const inOffset   = direction === 'next' ? '20px'  : '-20px';
-    yearNav.css({ transition: 'opacity .18s ease, transform .18s ease', opacity: 0, transform: 'translateX(' + outOffset + ')' });
+    yearNav.css({ transition: 'transform .18s ease', transform: 'translateX(' + outOffset + ')' });
     setTimeout(() => {
       renderYearCards();
       yearNav.css({ transition: 'none', transform: 'translateX(' + inOffset + ')' });
       void yearNav[0].offsetWidth; // リフローを挟んでtransitionを確実に発火させる
-      yearNav.css({ transition: 'opacity .18s ease, transform .18s ease', opacity: 1, transform: 'translateX(0)' });
+      yearNav.css({ transition: 'transform .18s ease', transform: 'translateX(0)' });
     }, 180);
   }
 
